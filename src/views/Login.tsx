@@ -1,6 +1,6 @@
 import { useState } from 'react';
-
-type Role = 'admin' | 'asesor' | 'tecnico';
+import { login } from '../../utils/auth';
+import type { Role } from '../store';
 
 interface LoginProps {
   onLogin: (role: Role, name: string) => void;
@@ -12,10 +12,10 @@ const roles: { id: Role; label: string; desc: string; color: string; accent: str
   { id: 'tecnico', label: 'Técnico Mecánico',   desc: 'Órdenes asignadas, actualización de estado y repuestos.',        color: '#059669', accent: 'rgba(5,150,105,0.12)'  },
 ];
 
-const demoUsers: Record<Role, { name: string; email: string; pass: string }> = {
-  admin:   { name: 'Roberto Vásquez', email: 'admin@autoserv.ec',   pass: '1234' },
-  asesor:  { name: 'Juan Pérez',      email: 'asesor@autoserv.ec',  pass: '1234' },
-  tecnico: { name: 'Miguel Torres',   email: 'tecnico@autoserv.ec', pass: '1234' },
+const demoUsers: Record<Role, { email: string; pass: string }> = {
+  admin:   { email: 'admin@autoserv.local',   pass: 'Admin12345' },
+  asesor:  { email: 'asesor@autoserv.local',  pass: 'Asesor123' },
+  tecnico: { email: 'tecnico@autoserv.local', pass: 'Tecnico123' },
 };
 
 export default function Login({ onLogin }: LoginProps) {
@@ -32,16 +32,20 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
   };
 
-  const handleLogin = () => {
-    if (!selectedRole) { setError('Selecciona un rol para continuar.'); return; }
-    const demo = demoUsers[selectedRole];
-    if (email !== demo.email || pass !== demo.pass) {
-      setError('Credenciales incorrectas. Usa las credenciales del rol seleccionado.');
+  const handleLogin = async () => {
+    if (!email.trim() || !pass) {
+      setError('Ingresa correo y contraseña.');
       return;
     }
     setError('');
     setLoading(true);
-    setTimeout(() => onLogin(selectedRole, demo.name), 800);
+    try {
+      const session = await login(email.trim(), pass);
+      onLogin(session.role, session.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.');
+      setLoading(false);
+    }
   };
 
   const accentCol = selectedRole ? roles.find(r => r.id === selectedRole)!.color : '#2563eb';
@@ -188,7 +192,7 @@ export default function Login({ onLogin }: LoginProps) {
 
           <div className="px-6 pb-4 pt-0">
             <p className="text-center text-[10px]" style={{ color: '#475569' }}>
-              Selecciona un rol para autocompletar · Contraseña demo: <span style={{ color: '#94a3b8' }}>1234</span>
+              Selecciona un rol para autocompletar la cuenta de prueba.
             </p>
           </div>
         </div>

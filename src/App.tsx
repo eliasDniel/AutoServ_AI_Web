@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { clearSession, readSession } from '../utils/auth';
 import * as api from '../utils/supabase/api';
 import NavSidebar from './components/NavSidebar';
 import TopBar from './components/TopBar';
@@ -33,8 +34,14 @@ const defaultViewByRole: Record<Role, View> = {
 const sidebarViews: View[] = ['reception', 'orders'];
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [view, setView] = useState<View>('reception');
+  const [session, setSession] = useState<Session | null>(() => {
+    const saved = readSession();
+    return saved ? { role: saved.role, name: saved.name } : null;
+  });
+  const [view, setView] = useState<View>(() => {
+    const saved = readSession();
+    return saved ? defaultViewByRole[saved.role] : 'reception';
+  });
   const [selectedOS, setSelectedOS] = useState(initialOrders[0].os);
   const [pendingPaymentOS, setPendingPaymentOS] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
@@ -113,7 +120,11 @@ export default function App() {
     setDraftNewOrder(null);
   };
 
-  const handleLogout = () => { setSession(null); setDraftNewOrder(null); };
+  const handleLogout = () => {
+    clearSession();
+    setSession(null);
+    setDraftNewOrder(null);
+  };
 
   const selectOS = (os: string) => {
     setDraftNewOrder(null);
