@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { clearSession, readSession } from '../utils/auth';
-import { cambiarEstado, guardarRecepcion, listarRecepcion } from '../utils/recepcion';
+import { cambiarEstado, guardarRecepcion, listarRecepcion, reiniciarDatos } from '../utils/recepcion';
 import * as api from '../utils/supabase/api';
 import NavSidebar from './components/NavSidebar';
 import TopBar from './components/TopBar';
@@ -122,6 +122,16 @@ export default function App() {
     setDraftNewOrder(null);
   };
 
+  const reiniciarDatosTaller = async () => {
+    await reiniciarDatos();
+    setClients([]);
+    setVehicles([]);
+    setOrders([]);
+    setSelectedOS('');
+    setDraftNewOrder(null);
+    setPendingPaymentOS(null);
+  };
+
   const handleLogout = () => {
     clearSession();
     setSession(null);
@@ -172,12 +182,28 @@ export default function App() {
     return items.map((current) => (current.id === item.id ? item : current));
   };
 
+  const telefonoDe = (valor: string) => valor.replace(/\D/g, '');
+  const emailDe = (valor: string) => valor.trim().toLowerCase();
+  const mismoContacto = (a: Client, b: Client) => {
+    const telefono = telefonoDe(a.phone);
+    const email = emailDe(a.email);
+    if (telefono && telefono === telefonoDe(b.phone)) return true;
+    if (email && email === emailDe(b.email)) return true;
+    return false;
+  };
+  const reutilizarCliente = (client: Client) => {
+    if (/^\d+$/.test(client.id)) return client;
+    const conocido = clients.find((item) => /^\d+$/.test(item.id) && mismoContacto(item, client));
+    return conocido ? { ...client, id: conocido.id } : client;
+  };
+
   const saveOrder = async (
     updated: ServiceOrder,
     clientArg?: Client,
     vehicleArg?: Vehicle,
   ): Promise<ServiceOrder> => {
-    const client = clientArg ?? clients.find((item) => item.id === updated.clientId);
+    const ingresado = clientArg ?? clients.find((item) => item.id === updated.clientId);
+    const client = ingresado ? reutilizarCliente(ingresado) : ingresado;
     const vehicle = vehicleArg ?? vehicles.find((item) => item.id === updated.vehicleId);
     if (!client?.name || !vehicle?.plate) {
       throw new Error('Completa el nombre del cliente y la placa del vehículo.');
@@ -189,7 +215,9 @@ export default function App() {
       diagnosisNotes: updated.diagnosisNotes,
       payment: updated.payment,
     };
-    setClients((prev) => upsertById(prev, guardado.cliente));
+    setClients((prev) => upsertById(prev, guardado.cliente).filter((item) => (
+      item.id === guardado.cliente.id || !mismoContacto(item, guardado.cliente)
+    )));
     setVehicles((prev) => upsertById(prev, guardado.vehiculo));
     setOrders((prev) => [
       persisted,
@@ -315,6 +343,8 @@ export default function App() {
               order={receptionOrder}
               client={currentClient}
               vehicle={currentVehicle}
+              clients={clients}
+              vehicles={vehicles}
               inventory={inventory}
               allOrders={orders}
               onSave={saveOrder}
@@ -434,7 +464,7 @@ export default function App() {
             <Reports orders={orders} clients={clients} vehicles={vehicles} />
           )}
           {view === 'config' && <Config />}
-          {view === 'dbschema' && <DatabaseSchema />}
+          {view === 'dbschema' && <DatabaseSchema onReset={reiniciarDatosTaller} />}
         </main>
         </div>
       </div>

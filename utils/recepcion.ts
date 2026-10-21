@@ -103,6 +103,14 @@ export async function guardarRecepcion(
   return parse<{ cliente: Client; vehiculo: Vehicle; orden: ServiceOrder }>(response);
 }
 
+export async function reiniciarDatos() {
+  const response = await fetch(`${API_URL}/datos/reiniciar`, {
+    method: 'POST',
+    headers: headers(),
+  });
+  return parse<{ ok: boolean }>(response);
+}
+
 export async function cambiarEstado(numeroOs: string, estado: OrderStatus) {
   const response = await fetch(
     `${API_URL}/ordenes/${encodeURIComponent(numeroOs)}/estado`,

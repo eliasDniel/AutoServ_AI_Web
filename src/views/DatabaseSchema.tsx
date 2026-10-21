@@ -359,10 +359,25 @@ CREATE TABLE pagos (
   registrado_por            UUID NOT NULL REFERENCES usuarios(id)
 );`;
 
-export default function DatabaseSchema() {
+export default function DatabaseSchema({ onReset }: { onReset: () => Promise<void> }) {
   const [activeTable, setActiveTable] = useState<string | null>(null);
   const [showSQL, setShowSQL] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [resetStep, setResetStep] = useState<'idle' | 'confirm' | 'loading' | 'done' | 'error'>('idle');
+  const [resetError, setResetError] = useState('');
+
+  const confirmarReinicio = async () => {
+    setResetStep('loading');
+    setResetError('');
+    try {
+      await onReset();
+      setResetStep('done');
+      setTimeout(() => setResetStep('idle'), 2500);
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : 'No se pudo reiniciar.');
+      setResetStep('error');
+    }
+  };
 
   const copySQL = () => {
     navigator.clipboard.writeText(SQL_DDL);
@@ -398,7 +413,38 @@ export default function DatabaseSchema() {
           </h1>
           <p className="text-xs text-slate-500">{tables.length} tablas · {tables.reduce((s, t) => s + t.columns.length, 0)} columnas · PostgreSQL</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {resetStep === 'confirm' || resetStep === 'loading' ? (
+            <>
+              <span className="text-[11px] text-red-700 max-w-56 text-right">
+                Borra clientes, vehículos y órdenes. Los usuarios se quedan.
+              </span>
+              <button
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white"
+                onClick={() => setResetStep('idle')}
+                disabled={resetStep === 'loading'}
+              >
+                Cancelar
+              </button>
+              <button
+                className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-60"
+                onClick={() => { void confirmarReinicio(); }}
+                disabled={resetStep === 'loading'}
+              >
+                {resetStep === 'loading' ? 'Reiniciando…' : 'Sí, reiniciar'}
+              </button>
+            </>
+          ) : (
+            <button
+              className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-700 bg-white hover:bg-red-50 font-semibold"
+              onClick={() => setResetStep('confirm')}
+            >
+              {resetStep === 'done' ? '✓ Datos reiniciados' : 'Reiniciar datos'}
+            </button>
+          )}
+          {resetStep === 'error' && (
+            <span className="text-[11px] text-red-600">{resetError}</span>
+          )}
           <button
             onClick={() => setShowSQL(!showSQL)}
             className={`btn-secondary text-xs ${showSQL ? 'bg-blue-50 border-blue-300 text-blue-700' : ''}`}

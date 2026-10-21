@@ -67,10 +67,21 @@ function CarSVG({ parts, onToggle }: { parts: Record<string, boolean>; onToggle:
   );
 }
 
+const emptyClient = (): Client => ({
+  id: '', name: '', phone: '', email: '', address: '', city: '',
+});
+
+const emptyVehicle = (clientId = ''): Vehicle => ({
+  id: '', clientId, plate: '', brand: '', model: '', year: '', color: '',
+  vin: '', engine: '', fuel: '', transmission: '', km: 0,
+});
+
 interface ReceptionProps {
   order: ServiceOrder;
   client: Client;
   vehicle: Vehicle;
+  clients: Client[];
+  vehicles: Vehicle[];
   inventory: InventoryItem[];
   allOrders: ServiceOrder[];
   onSave: (
@@ -83,7 +94,7 @@ interface ReceptionProps {
   onUpdateClientVehicle?: (c: Client, v: Vehicle) => void;
 }
 
-export default function Reception({ order, client, vehicle, inventory, allOrders, onSave, onAdvance }: ReceptionProps) {
+export default function Reception({ order, client, vehicle, clients, vehicles, inventory, allOrders, onSave, onAdvance }: ReceptionProps) {
   const isNew = client.id === '';
 
   const [activeTab, setActiveTab] = useState('datos');
@@ -171,6 +182,36 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
 
   const togglePart = (p: string) => update({ parts: { ...draft.parts, [p]: !draft.parts[p] } });
 
+  const clientVehicles = vehicles.filter((item) => item.clientId === draftClient.id && draftClient.id);
+
+  const chooseClient = (id: string) => {
+    if (!id) {
+      setDraftClient(emptyClient());
+      setDraftVehicle(emptyVehicle());
+      update({ clientId: '', vehicleId: '' });
+      return;
+    }
+    const chosen = clients.find((item) => item.id === id);
+    if (!chosen) return;
+    const own = vehicles.filter((item) => item.clientId === chosen.id);
+    const nextVehicle = own.length === 1 ? own[0] : emptyVehicle(chosen.id);
+    setDraftClient(chosen);
+    setDraftVehicle(nextVehicle);
+    update({ clientId: chosen.id, vehicleId: nextVehicle.id });
+  };
+
+  const chooseVehicle = (id: string) => {
+    if (!id) {
+      setDraftVehicle(emptyVehicle(draftClient.id));
+      update({ vehicleId: '' });
+      return;
+    }
+    const chosen = vehicles.find((item) => item.id === id);
+    if (!chosen) return;
+    setDraftVehicle(chosen);
+    update({ clientId: chosen.clientId, vehicleId: chosen.id });
+  };
+
   const persist = async () => {
     if (savingRef.current) return draft;
     savingRef.current = true;
@@ -183,7 +224,15 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
         signature: firma,
         authSigned: draft.authSigned || Boolean(firma),
       };
-      const savedOrder = await onSave(next, draftClient, draftVehicle);
+      const savedOrder = await onSave(
+        next,
+        { ...draftClient, id: draftClient.id || draft.clientId },
+        {
+          ...draftVehicle,
+          id: draftVehicle.id || draft.vehicleId,
+          clientId: draftClient.id || draft.clientId || draftVehicle.clientId,
+        },
+      );
       setDraft(savedOrder);
       setDraftClient(prev => ({ ...prev, id: savedOrder.clientId }));
       setDraftVehicle(prev => ({
@@ -234,7 +283,7 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
   const total = (draft.services ?? []).reduce((s, v) => s + v.price, 0) +
     (draft.usedParts ?? []).filter(p => p.used).reduce((s, p) => s + p.price * p.qty, 0);
 
-  const vehicleHistory = allOrders.filter(o => o.vehicleId === vehicle.id && o.os !== draft.os);
+  const vehicleHistory = allOrders.filter(o => draftVehicle.id && o.vehicleId === draftVehicle.id && o.os !== draft.os);
 
   const statusMap: Record<string, string> = { recepcion: 'RECEPCIÓN', en_taller: 'EN TALLER', terminada: 'TERMINADA' };
   const statusClass: Record<string, string> = { recepcion: 'status-recepcion', en_taller: 'status-taller', terminada: 'status-terminada' };
@@ -277,6 +326,23 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
                   {isNew && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded" style={{ background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}>Nueva orden — completa los datos</span>}
                 </h3>
                 <div className="space-y-2.5">
+                  {clients.length > 0 && (
+                    <div>
+                      <label className="form-label">Cliente registrado</label>
+                      <select
+                        className="form-select"
+                        value={clients.some((item) => item.id === draftClient.id) ? draftClient.id : ''}
+                        onChange={(e) => chooseClient(e.target.value)}
+                      >
+                        <option value="">Nuevo cliente</option>
+                        {clients.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}{item.phone ? ` · ${item.phone}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {([
                     { label: 'Nombre completo', key: 'name' as keyof Client },
                     { label: 'Teléfono', key: 'phone' as keyof Client },
@@ -302,6 +368,23 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
                 <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3 pb-2 border-b border-slate-100">Datos del Vehículo</h3>
                 <div className="flex gap-3">
                   <div className="flex-1 space-y-2">
+                    {clientVehicles.length > 0 && (
+                      <div>
+                        <label className="form-label">Vehículo registrado</label>
+                        <select
+                          className="form-select"
+                          value={clientVehicles.some((item) => item.id === draftVehicle.id) ? draftVehicle.id : ''}
+                          onChange={(e) => chooseVehicle(e.target.value)}
+                        >
+                          <option value="">Nuevo vehículo</option>
+                          {clientVehicles.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.plate} · {item.brand} {item.model}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       {([
                         { label: 'Placa',        key: 'plate' as keyof Vehicle },
@@ -318,7 +401,19 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
                           <input
                             className="form-input"
                             value={f.key === 'km' ? String(draftVehicle.km) : (draftVehicle[f.key] as string)}
-                            onChange={e => setDraftVehicle(prev => ({ ...prev, [f.key]: f.key === 'km' ? Number(e.target.value) || 0 : e.target.value }))}
+                            onChange={e => {
+                              const value = f.key === 'km' ? Number(e.target.value) || 0 : e.target.value;
+                              setDraftVehicle(prev => {
+                                const next = { ...prev, [f.key]: value };
+                                if (f.key !== 'plate' || !prev.id) return next;
+                                const registrado = vehicles.find((item) => item.id === prev.id);
+                                if (registrado && registrado.plate.trim().toUpperCase() !== String(value).trim().toUpperCase()) {
+                                  next.id = '';
+                                }
+                                return next;
+                              });
+                              setSaved(false);
+                            }}
                             placeholder={f.label}
                             type={f.key === 'km' ? 'number' : 'text'}
                           />
