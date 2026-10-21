@@ -73,13 +73,17 @@ interface ReceptionProps {
   vehicle: Vehicle;
   inventory: InventoryItem[];
   allOrders: ServiceOrder[];
-  onSave: (updated: ServiceOrder) => void;
-  onAdvance: (os: string) => void;
+  onSave: (
+    updated: ServiceOrder,
+    client?: Client,
+    vehicle?: Vehicle,
+  ) => Promise<ServiceOrder>;
+  onAdvance: (os: string, status?: ServiceOrder['status']) => void;
   onCreateClientVehicle?: (c: Client, v: Vehicle, osId: string) => void;
   onUpdateClientVehicle?: (c: Client, v: Vehicle) => void;
 }
 
-export default function Reception({ order, client, vehicle, inventory, allOrders, onSave, onAdvance, onCreateClientVehicle, onUpdateClientVehicle }: ReceptionProps) {
+export default function Reception({ order, client, vehicle, inventory, allOrders, onSave, onAdvance }: ReceptionProps) {
   const isNew = client.id === '';
 
   const [activeTab, setActiveTab] = useState('datos');
@@ -92,6 +96,7 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
   const photoInputRef = useRef<HTMLInputElement>(null);
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
   const sigLastPos = useRef<{ x: number; y: number } | null>(null);
+  const savingRef = useRef(false);
 
   // Editable client/vehicle for new orders
   const [draftClient, setDraftClient] = useState<Client>({
@@ -154,6 +159,7 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
     const canvas = sigCanvasRef.current!;
     canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
     setHasSig(false);
+    update({ signature: undefined });
   };
 
   const printOS = () => window.print();
@@ -165,22 +171,46 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
 
   const togglePart = (p: string) => update({ parts: { ...draft.parts, [p]: !draft.parts[p] } });
 
-  const save = () => {
-    if (isNew && onCreateClientVehicle) {
-      const newClientId = `C${String(Date.now()).slice(-4)}`;
-      const newVehicleId = `V${String(Date.now()).slice(-4)}`;
-      const newClient: Client = { ...draftClient, id: newClientId };
-      const newVehicle: Vehicle = { ...draftVehicle, id: newVehicleId, clientId: newClientId };
-      onCreateClientVehicle(newClient, newVehicle, draft.os);
-    } else if (!isNew && onUpdateClientVehicle) {
-      onUpdateClientVehicle(
-        { ...client, ...draftClient },
-        { ...vehicle, ...draftVehicle },
-      );
+  const persist = async () => {
+    if (savingRef.current) return draft;
+    savingRef.current = true;
+    try {
+      const firma = hasSig && sigCanvasRef.current
+        ? sigCanvasRef.current.toDataURL('image/png')
+        : draft.signature;
+      const next: ServiceOrder = {
+        ...draft,
+        signature: firma,
+        authSigned: draft.authSigned || Boolean(firma),
+      };
+      const savedOrder = await onSave(next, draftClient, draftVehicle);
+      setDraft(savedOrder);
+      setDraftClient(prev => ({ ...prev, id: savedOrder.clientId }));
+      setDraftVehicle(prev => ({
+        ...prev,
+        id: savedOrder.vehicleId,
+        clientId: savedOrder.clientId,
+      }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      return savedOrder;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo guardar la recepción.';
+      window.alert(message);
+      return draft;
+    } finally {
+      savingRef.current = false;
     }
-    onSave(draft);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const save = () => {
+    void persist();
+  };
+
+  const saveAndAdvance = async () => {
+    const savedOrder = await persist();
+    if (savedOrder.os.startsWith('OS-2024-')) return;
+    onAdvance(savedOrder.os, savedOrder.status);
   };
 
   const removeService = (code: string) => update({ services: draft.services.filter(s => s.code !== code) });
@@ -666,8 +696,8 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
               <div className="grid grid-cols-3 gap-3 text-xs">
                 {[
                   { l: 'Nro. OS', v: draft.os }, { l: 'Estado', v: statusMap[draft.status] }, { l: 'Fecha', v: draft.date },
-                  { l: 'Cliente', v: client.name }, { l: 'Vehículo', v: `${vehicle.brand} ${vehicle.model} ${vehicle.year}` }, { l: 'Placa', v: vehicle.plate },
-                  { l: 'Km Ingreso', v: `${vehicle.km.toLocaleString()} km` }, { l: 'Combustible', v: `${draft.fuelLevel}%` }, { l: 'Asesor', v: draft.advisor },
+                  { l: 'Cliente', v: draftClient.name }, { l: 'Vehículo', v: `${draftVehicle.brand} ${draftVehicle.model} ${draftVehicle.year}` }, { l: 'Placa', v: draftVehicle.plate },
+                  { l: 'Km Ingreso', v: `${Number(draftVehicle.km || 0).toLocaleString()} km` }, { l: 'Combustible', v: `${draft.fuelLevel}%` }, { l: 'Asesor', v: draft.advisor },
                 ].map(f => (
                   <div key={f.l}><span className="text-slate-500">{f.l}:</span> <span className="font-semibold text-slate-800">{f.v}</span></div>
                 ))}
@@ -694,7 +724,7 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
             </div>
             {draft.status !== 'terminada' && (
               <div className="flex gap-3">
-                <button className="btn-primary flex-1 justify-center" onClick={() => { save(); onAdvance(draft.os); }}>
+                <button className="btn-primary flex-1 justify-center" onClick={() => { void saveAndAdvance(); }}>
                   {nextLabel[draft.status]} →
                 </button>
               </div>
@@ -760,7 +790,7 @@ export default function Reception({ order, client, vehicle, inventory, allOrders
           <button className="btn-secondary text-xs" onClick={save}>💾 Guardar</button>
           <button className="btn-secondary text-xs" onClick={printOS}>🖨️ Imprimir OS</button>
           {draft.status !== 'terminada' && (
-            <button className="btn-primary text-xs" onClick={() => { save(); onAdvance(draft.os); }}>
+            <button className="btn-primary text-xs" onClick={() => { void saveAndAdvance(); }}>
               {nextLabel[draft.status]} ›
             </button>
           )}

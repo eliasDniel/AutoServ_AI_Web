@@ -105,6 +105,7 @@ export interface ServiceOrder {
   parts: Record<string, boolean>;
   services: ServiceLine[];
   usedParts: PartLine[];
+  signature?: string;
   diagnosisNotes?: string;
   payment?: {
     method: 'efectivo' | 'tarjeta' | 'mixto';

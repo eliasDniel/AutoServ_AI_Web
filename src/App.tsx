@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { clearSession, readSession } from '../utils/auth';
+import { cambiarEstado, guardarRecepcion, listarRecepcion } from '../utils/recepcion';
 import * as api from '../utils/supabase/api';
 import NavSidebar from './components/NavSidebar';
 import TopBar from './components/TopBar';
@@ -42,7 +43,7 @@ export default function App() {
     const saved = readSession();
     return saved ? defaultViewByRole[saved.role] : 'reception';
   });
-  const [selectedOS, setSelectedOS] = useState(initialOrders[0].os);
+  const [selectedOS, setSelectedOS] = useState('');
   const [pendingPaymentOS, setPendingPaymentOS] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -62,9 +63,9 @@ export default function App() {
   }, []);
 
   // Shared state
-  const [orders, setOrders] = useState<ServiceOrder[]>(initialOrders);
-  const [clients, setClients] = useState<Client[]>(initialClients);
-  const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
+  const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
   const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
   const [syncingApts, setSyncingApts] = useState(false);
@@ -85,21 +86,22 @@ export default function App() {
     }
   }, []);
 
-  // Cargar datos reales desde Supabase al hacer login
   useEffect(() => {
     if (!session) return;
-    Promise.all([
-      api.clients.list(),
-      api.vehicles.list(),
-      api.orders.list(),
-      api.inventory.list(),
-    ]).then(([remoteClients, remoteVehicles, remoteOrders, remoteInventory]) => {
-      if (remoteClients.length > 0) setClients(remoteClients);
-      if (remoteVehicles.length > 0) setVehicles(remoteVehicles);
-      if (remoteOrders.length > 0) {
-        setOrders(remoteOrders);
-        setSelectedOS(remoteOrders[0].os);
-      }
+    listarRecepcion()
+      .then((remote) => {
+        setClients(remote.clientes);
+        setVehicles(remote.vehiculos);
+        setOrders(remote.ordenes);
+        setSelectedOS(remote.ordenes[0]?.os ?? '');
+      })
+      .catch(() => {
+        setClients(initialClients);
+        setVehicles(initialVehicles);
+        setOrders(initialOrders);
+        setSelectedOS(initialOrders[0].os);
+      });
+    api.inventory.list().then((remoteInventory) => {
       if (remoteInventory.length > 0) setInventory(remoteInventory);
     });
   }, [session]);
@@ -116,7 +118,7 @@ export default function App() {
   const handleLogin = (role: Role, name: string) => {
     setSession({ role, name });
     setView(defaultViewByRole[role]);
-    setSelectedOS(initialOrders[0].os);
+    setSelectedOS('');
     setDraftNewOrder(null);
   };
 
@@ -164,36 +166,69 @@ export default function App() {
     setView('reception');
   };
 
-  const saveOrder = (updated: ServiceOrder) => {
-    api.orders.save(updated); // persiste en Supabase
-    if (draftNewOrder && updated.os === draftNewOrder.os) {
-      setOrders(prev => [updated, ...prev]);
-      setSelectedOS(updated.os);
-      setDraftNewOrder(null);
-    } else {
-      setOrders(prev => prev.map(o => o.os === updated.os ? updated : o));
-    }
+  const upsertById = <T extends { id: string }>(items: T[], item: T) => {
+    const index = items.findIndex((current) => current.id === item.id);
+    if (index === -1) return [item, ...items];
+    return items.map((current) => (current.id === item.id ? item : current));
   };
 
-  const advanceOrder = (os: string) => {
-    const order = orders.find(o => o.os === os);
-    if (!order) return;
-    if (order.status === 'en_taller') {
-      // Show payment modal before marking as terminada
+  const saveOrder = async (
+    updated: ServiceOrder,
+    clientArg?: Client,
+    vehicleArg?: Vehicle,
+  ): Promise<ServiceOrder> => {
+    const client = clientArg ?? clients.find((item) => item.id === updated.clientId);
+    const vehicle = vehicleArg ?? vehicles.find((item) => item.id === updated.vehicleId);
+    if (!client?.name || !vehicle?.plate) {
+      throw new Error('Completa el nombre del cliente y la placa del vehículo.');
+    }
+    const guardado = await guardarRecepcion(updated, client, vehicle);
+    const persisted: ServiceOrder = {
+      ...updated,
+      ...guardado.orden,
+      diagnosisNotes: updated.diagnosisNotes,
+      payment: updated.payment,
+    };
+    setClients((prev) => upsertById(prev, guardado.cliente));
+    setVehicles((prev) => upsertById(prev, guardado.vehiculo));
+    setOrders((prev) => [
+      persisted,
+      ...prev.filter((item) => item.os !== updated.os && item.os !== persisted.os),
+    ]);
+    setSelectedOS(persisted.os);
+    if (draftNewOrder && updated.os === draftNewOrder.os) setDraftNewOrder(null);
+    return persisted;
+  };
+
+  const advanceOrder = async (os: string, status?: ServiceOrder['status']) => {
+    const current = status ?? orders.find((item) => item.os === os)?.status;
+    if (!current || current === 'terminada') return;
+    if (current === 'en_taller') {
       setPendingPaymentOS(os);
-    } else if (order.status === 'recepcion') {
-      setOrders(prev => prev.map(o => o.os === os ? { ...o, status: 'en_taller' } : o));
+      return;
+    }
+    try {
+      const updated = await cambiarEstado(os, 'en_taller');
+      setOrders((prev) => prev.map((item) => (
+        item.os === os ? { ...item, status: updated.status } : item
+      )));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo cambiar el estado.');
     }
   };
 
-  const handlePaymentConfirm = (payment: ServiceOrder['payment']) => {
+  const handlePaymentConfirm = async (payment: ServiceOrder['payment']) => {
     if (!pendingPaymentOS) return;
-    setOrders(prev => prev.map(o =>
-      o.os === pendingPaymentOS
-        ? { ...o, status: 'terminada', payment }
-        : o
-    ));
-    setPendingPaymentOS(null);
+    const numero = pendingPaymentOS;
+    try {
+      await cambiarEstado(numero, 'terminada');
+      setOrders((prev) => prev.map((item) => (
+        item.os === numero ? { ...item, status: 'terminada', payment } : item
+      )));
+      setPendingPaymentOS(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo cerrar la orden.');
+    }
   };
 
   const navigate = (v: View) => {
@@ -212,9 +247,16 @@ export default function App() {
   const blankVehicle: Vehicle = { id: '', clientId: '', plate: '', brand: '', model: '', year: '', color: '', vin: '', engine: '', fuel: '', transmission: '', km: 0 };
 
   // Si hay un borrador de nueva orden, Reception lo muestra; si no, muestra la orden seleccionada
-  const receptionOrder = draftNewOrder ?? (orders.find(o => o.os === selectedOS) ?? orders[0]);
-  const currentClient = clients.find(c => c.id === receptionOrder.clientId) ?? blankClient;
-  const currentVehicle = vehicles.find(v => v.id === receptionOrder.vehicleId) ?? blankVehicle;
+  const receptionOrder = draftNewOrder
+    ?? orders.find((item) => item.os === selectedOS)
+    ?? orders[0]
+    ?? null;
+  const currentClient = receptionOrder
+    ? clients.find((item) => item.id === receptionOrder.clientId) ?? blankClient
+    : blankClient;
+  const currentVehicle = receptionOrder
+    ? vehicles.find((item) => item.id === receptionOrder.vehicleId) ?? blankVehicle
+    : blankVehicle;
   const showSidebar = sidebarViews.includes(view);
 
   const pendingOrder = pendingPaymentOS ? orders.find(o => o.os === pendingPaymentOS) : null;
@@ -268,6 +310,7 @@ export default function App() {
           )}
           {/* Always mounted so local draft state survives sidebar/orders navigation */}
           <div className={view === 'reception' ? 'flex-1 overflow-hidden flex flex-col' : 'hidden'}>
+            {receptionOrder ? (
             <Reception
               order={receptionOrder}
               client={currentClient}
@@ -276,25 +319,15 @@ export default function App() {
               allOrders={orders}
               onSave={saveOrder}
               onAdvance={advanceOrder}
-              onCreateClientVehicle={(c, v, osId) => {
-                api.clients.save(c);
-                api.vehicles.save(v);
-                setClients(prev => [...prev, c]);
-                setVehicles(prev => [...prev, v]);
-                if (draftNewOrder && osId === draftNewOrder.os) {
-                  // Actualiza el borrador con clientId/vehicleId, pero no lo agrega a la lista aún
-                  setDraftNewOrder(prev => prev ? { ...prev, clientId: c.id, vehicleId: v.id } : null);
-                } else {
-                  setOrders(prev => prev.map(o => o.os === osId ? { ...o, clientId: c.id, vehicleId: v.id } : o));
-                }
-              }}
-              onUpdateClientVehicle={(c, v) => {
-                api.clients.update(c);
-                api.vehicles.update(v);
-                setClients(prev => prev.map(x => x.id === c.id ? c : x));
-                setVehicles(prev => prev.map(x => x.id === v.id ? v : x));
-              }}
             />
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center space-y-3">
+                  <p className="text-sm font-semibold text-slate-600">No hay órdenes de recepción.</p>
+                  <button className="btn-primary" onClick={createNewOrder}>Nueva recepción</button>
+                </div>
+              </div>
+            )}
           </div>
           {view === 'orders' && (
             <Orders
