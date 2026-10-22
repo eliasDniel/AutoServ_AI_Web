@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Client, Vehicle, ServiceOrder } from '../store';
 
 interface ClientsProps {
@@ -21,11 +21,14 @@ const blankVehicle = (clientId: string): Omit<Vehicle, 'id'> => ({
   color: '', vin: '', engine: '', fuel: 'Gasolina', transmission: 'Automática', km: 0,
 });
 
+const initials = (name?: string) =>
+  (name ?? '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0] ?? '').join('') || '?';
+
 export default function Clients({ clients, vehicles, orders, onSelectOS, onNavigate, onAddClient, onUpdateClient, onAddVehicle }: ClientsProps) {
-  const [selected, setSelected] = useState<Client>(clients[0]);
+  const [selected, setSelected] = useState<Client | null>(clients[0] ?? null);
   const [search, setSearch] = useState('');
   const [editMode, setEditMode] = useState(false);
-  const [draft, setDraft] = useState<Client>(clients[0]);
+  const [draft, setDraft] = useState<Client | null>(clients[0] ?? null);
   const [savedMsg, setSavedMsg] = useState('');
   const [showNewClient, setShowNewClient] = useState(false);
   const [showNewVehicle, setShowNewVehicle] = useState(false);
@@ -33,18 +36,34 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
   const [newVehicleDraft, setNewVehicleDraft] = useState(blankVehicle(clients[0]?.id ?? ''));
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
 
+  useEffect(() => {
+    if (!clients.length) {
+      setSelected(null);
+      setDraft(null);
+      return;
+    }
+    const stillExists = selected && clients.some(c => c.id === selected.id);
+    if (!stillExists) {
+      setSelected(clients[0]);
+      setDraft(clients[0]);
+      setEditMode(false);
+    }
+  }, [clients, selected]);
+
+  const query = search.toLowerCase();
   const filtered = clients.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.phone.includes(search) ||
-    c.email.toLowerCase().includes(search.toLowerCase())
+    (c.name ?? '').toLowerCase().includes(query) ||
+    (c.phone ?? '').includes(search) ||
+    (c.email ?? '').toLowerCase().includes(query)
   );
 
-  const clientVehicles = vehicles.filter(v => v.clientId === selected.id);
-  const clientOrders = orders.filter(o => o.clientId === selected.id);
+  const clientVehicles = selected ? vehicles.filter(v => v.clientId === selected.id) : [];
+  const clientOrders = selected ? orders.filter(o => o.clientId === selected.id) : [];
 
   const selectClient = (c: Client) => { setSelected(c); setDraft(c); setEditMode(false); setSavedMsg(''); };
 
   const saveEdit = () => {
+    if (!draft) return;
     onUpdateClient(draft);
     setSelected(draft);
     setSavedMsg('✓ Cambios guardados');
@@ -73,7 +92,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
   };
 
   const submitNewVehicle = () => {
-    if (!newVehicleDraft.plate.trim() || !newVehicleDraft.model.trim()) return;
+    if (!selected || !newVehicleDraft.plate.trim() || !newVehicleDraft.model.trim()) return;
     const newId = `V${String(vehicles.length + 1).padStart(3, '0')}`;
     onAddVehicle({ id: newId, clientId: selected.id, ...newVehicleDraft });
     setShowNewVehicle(false);
@@ -118,7 +137,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewVehicle(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-bold text-slate-700 mb-1">Registrar Vehículo</h3>
-            <p className="text-xs text-slate-500 mb-4">Para: {selected.name}</p>
+            <p className="text-xs text-slate-500 mb-4">Para: {selected?.name ?? 'cliente'}</p>
             <div className="space-y-2.5">
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -202,10 +221,10 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
         <div className="flex-1 overflow-y-auto">
           {filtered.map(c => (
             <button key={c.id} onClick={() => selectClient(c)}
-              className={`w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-blue-50 transition-colors ${selected.id === c.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''}`}>
+              className={`w-full text-left px-3 py-2.5 border-b border-slate-50 hover:bg-blue-50 transition-colors ${selected?.id === c.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''}`}>
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold shrink-0">
-                  {c.name.split(' ').slice(0, 2).map(w => w[0]).join('')}
+                  {initials(c.name)}
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-slate-700 truncate">{c.name}</div>
@@ -227,11 +246,20 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
       </div>
 
       {/* Detail */}
+      {!selected || !draft ? (
+        <div className="flex-1 flex items-center justify-center bg-slate-50">
+          <div className="text-center space-y-3">
+            <p className="text-sm font-semibold text-slate-600">No hay clientes registrados.</p>
+            <p className="text-xs text-slate-400">Crea el primero para ver su ficha aquí.</p>
+            <button className="btn-primary justify-center text-xs" onClick={() => setShowNewClient(true)}>+ Nuevo Cliente</button>
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white text-lg font-bold">
-              {selected.name.split(' ').slice(0, 2).map(w => w[0]).join('')}
+              {initials(selected.name)}
             </div>
             <div>
               <h1 className="text-base font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>{selected.name}</h1>
@@ -265,12 +293,12 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
                 { label: 'Email', field: 'email' },
                 { label: 'Dirección', field: 'address' },
                 { label: 'Ciudad', field: 'city' },
-              ] as { label: string; field: keyof Client }[]).map(f => (
+              ] as { label: string; field: keyof Omit<Client, 'id'> }[]).map(f => (
                 <div key={f.field}>
                   <label className="form-label">{f.label}</label>
-                  <input className="form-input" value={draft[f.field]}
+                  <input className="form-input" value={draft[f.field] ?? ''}
                     readOnly={!editMode}
-                    onChange={e => setDraft(prev => ({ ...prev, [f.field]: e.target.value }))}
+                    onChange={e => setDraft(prev => prev ? { ...prev, [f.field]: e.target.value } : prev)}
                     style={{ background: editMode ? '#fff' : '#f8fafc' }} />
                 </div>
               ))}
@@ -297,7 +325,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
                       <span>Año: <strong>{v.year}</strong></span>
                       <span>Color: <strong>{v.color}</strong></span>
                       <span>Motor: <strong>{v.engine || '—'}</strong></span>
-                      <span>Km: <strong>{v.km.toLocaleString()}</strong></span>
+                      <span>Km: <strong>{Number(v.km ?? 0).toLocaleString()}</strong></span>
                     </div>
                   </div>
                 ))}
@@ -346,6 +374,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
