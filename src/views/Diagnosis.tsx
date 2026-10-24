@@ -1,52 +1,6 @@
 import { useState, useMemo } from 'react';
-import type { ServiceOrder, Client, Vehicle, ServiceLine } from '../store';
-
-interface DiagnosisResult {
-  category: string;
-  confidence: number;
-  description: string;
-  priority: 'Alta' | 'Media' | 'Baja';
-  services: { name: string; time: string; price: number }[];
-  explanation: string;
-}
-
-const sampleResultsBySymptom: DiagnosisResult[] = [
-  {
-    category: 'Sistema de Suspensión',
-    confidence: 87,
-    description: 'Falla en amortiguadores delanteros',
-    priority: 'Alta',
-    services: [
-      { name: 'Revisión completa de suspensión', time: '2h', price: 80 },
-      { name: 'Cambio de amortiguadores delanteros', time: '3h', price: 180 },
-      { name: 'Alineación y balanceo', time: '1h', price: 40 },
-    ],
-    explanation: 'Los síntomas descritos indican alta probabilidad de falla en amortiguadores delanteros. El modelo detectó patrones consistentes con desgaste de bujes basándose en 600 casos similares. Se recomienda atención prioritaria para garantizar la seguridad del vehículo.',
-  },
-  {
-    category: 'Sistema de Climatización',
-    confidence: 72,
-    description: 'Falla en compresor o bajo nivel de refrigerante',
-    priority: 'Media',
-    services: [
-      { name: 'Diagnóstico sistema A/C', time: '1h', price: 35 },
-      { name: 'Recarga de refrigerante R-134a', time: '0.5h', price: 45 },
-      { name: 'Revisión del compresor', time: '1.5h', price: 60 },
-    ],
-    explanation: 'El síntoma de aire acondicionado que no enfría sugiere bajo nivel de refrigerante o falla en el compresor. El LLM identificó esta correlación con 72% de confianza. Se recomienda diagnóstico electrónico antes de proceder.',
-  },
-  {
-    category: 'Sistema de Monitoreo TPMS',
-    confidence: 95,
-    description: 'Sensor TPMS activo o llanta con baja presión',
-    priority: 'Baja',
-    services: [
-      { name: 'Calibración de presión de llantas', time: '0.5h', price: 20 },
-      { name: 'Revisión y reset de sensor TPMS', time: '0.5h', price: 25 },
-    ],
-    explanation: 'El testigo de presión de llantas encendido es señal directa del sistema TPMS. Con 95% de confianza se requiere verificar presión en las 4 llantas y resetear sensores tras calibración.',
-  },
-];
+import type { ServiceOrder, Client, Vehicle, ServiceLine, DiagnosisCard } from '../store';
+import { diagnosticar } from '../../utils/recepcion';
 
 const priorityMeta: Record<string, { color: string; bg: string; border: string }> = {
   Alta:  { color: '#ef4444', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.2)' },
@@ -64,13 +18,15 @@ interface DiagnosisProps {
 export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: DiagnosisProps) {
   const activeOrders = orders.filter(o => o.status !== 'terminada');
 
-  const [selectedOS, setSelectedOS] = useState<string>(activeOrders[0]?.os ?? '');
-  const [symptoms, setSymptoms] = useState('');
+  const primera = activeOrders[0];
+  const [selectedOS, setSelectedOS] = useState<string>(primera?.os ?? '');
+  const [symptoms, setSymptoms] = useState(primera?.diagnosis?.texto || primera?.clientObservations || '');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [results, setResults] = useState<DiagnosisResult[] | null>(null);
+  const [results, setResults] = useState<DiagnosisCard[] | null>(primera?.diagnosis?.resultados ?? null);
   const [expanded, setExpanded] = useState<number | null>(0);
   const [added, setAdded] = useState<Set<number>>(new Set());
   const [addedToOS, setAddedToOS] = useState(false);
+  const [error, setError] = useState('');
 
   const currentOrder = useMemo(() => orders.find(o => o.os === selectedOS), [orders, selectedOS]);
   const currentVehicle = useMemo(() => vehicles.find(v => v.id === currentOrder?.vehicleId), [vehicles, currentOrder]);
@@ -78,65 +34,108 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
 
   const handleSelectOS = (os: string) => {
     setSelectedOS(os);
-    setResults(null);
     setAdded(new Set());
     setAddedToOS(false);
+    setError('');
     const order = orders.find(o => o.os === os);
-    if (order?.clientObservations) setSymptoms(order.clientObservations);
-    else setSymptoms('');
+    if (order?.diagnosis) {
+      setSymptoms(order.diagnosis.texto);
+      setResults(order.diagnosis.resultados);
+      return;
+    }
+    setResults(null);
+    setSymptoms(order?.clientObservations || '');
   };
 
-  const runDiagnosis = () => {
-    if (!symptoms.trim()) return;
+  const guardarDiagnostico = async (tarjetas: DiagnosisCard[], services?: ServiceLine[], notes?: string) => {
+    if (!currentOrder) return;
+    await Promise.resolve(onUpdateOrder({
+      ...currentOrder,
+      services: services ?? currentOrder.services,
+      diagnosis: { texto: symptoms.trim(), resultados: tarjetas },
+      diagnosisNotes: notes ?? currentOrder.diagnosisNotes,
+    }));
+  };
+
+  const runDiagnosis = async () => {
+    if (!symptoms.trim() || !currentOrder) return;
     setIsAnalyzing(true);
     setResults(null);
     setAdded(new Set());
     setAddedToOS(false);
-    setTimeout(() => {
-      setIsAnalyzing(false);
-      setResults(sampleResultsBySymptom);
+    setError('');
+    try {
+      const respuesta = await diagnosticar(symptoms.trim());
+      const tarjetas = respuesta.resultados ?? [];
+      const notas = tarjetas
+        .map((item) => `[${item.category ?? item.estado}] ${item.description}`)
+        .join('\n');
+      setResults(tarjetas);
       setExpanded(0);
-    }, 2200);
+      await guardarDiagnostico(tarjetas, undefined, notas);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo calcular el diagnóstico.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
-  const addResultToOrder = (result: DiagnosisResult, idx: number) => {
-    if (!currentOrder) return;
-    const newServices: ServiceLine[] = result.services.map((s, i) => ({
-      code: `IA-${Date.now()}-${i}`,
-      name: s.name,
-      time: s.time,
-      price: s.price,
-    }));
-    const diagText = `[Diagnóstico IA — ${result.category}]\n${result.description}\nConfianza: ${result.confidence}%\n${result.explanation}`;
-    onUpdateOrder({
-      ...currentOrder,
-      services: [...(currentOrder.services ?? []), ...newServices],
-      diagnosisNotes: (currentOrder.diagnosisNotes ? currentOrder.diagnosisNotes + '\n\n' : '') + diagText,
-    });
-    setAdded(prev => new Set([...prev, idx]));
-    setAddedToOS(true);
+  const serviciosNuevos = (order: ServiceOrder, lines: DiagnosisCard['services']): ServiceLine[] => {
+    const existentes = new Set((order.services ?? []).map((linea) => linea.code));
+    return lines
+      .filter((linea) => linea.code && !existentes.has(linea.code))
+      .map((linea) => ({
+        code: linea.code,
+        name: linea.name,
+        time: linea.time,
+        price: linea.price,
+      }));
   };
 
-  const addAllToOrder = () => {
+  const addResultToOrder = async (result: DiagnosisCard, idx: number) => {
     if (!currentOrder || !results) return;
-    let allServices: ServiceLine[] = [];
-    let allNotes = '';
-    results.forEach(r => {
-      allServices = [...allServices, ...r.services.map((s, i) => ({
-        code: `IA-${Date.now()}-${i}`,
-        name: s.name,
-        time: s.time,
-        price: s.price,
-      }))];
-      allNotes += `[${r.category}] ${r.description} (${r.confidence}%)\n`;
+    const confianza = result.confidence == null ? 'regla' : `${result.confidence}%`;
+    const diagText = `[Diagnóstico — ${result.category}]\n${result.description}\nConfianza: ${confianza}\n${result.explanation}`;
+    try {
+      await guardarDiagnostico(
+        results,
+        [...(currentOrder.services ?? []), ...serviciosNuevos(currentOrder, result.services)],
+        (currentOrder.diagnosisNotes ? currentOrder.diagnosisNotes + '\n\n' : '') + diagText,
+      );
+      setAdded(prev => new Set([...prev, idx]));
+      setAddedToOS(true);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo agregar el servicio a la orden.');
+    }
+  };
+
+  const addAllToOrder = async () => {
+    if (!currentOrder || !results) return;
+    const vistos = new Set((currentOrder.services ?? []).map((linea) => linea.code));
+    const nuevos: ServiceLine[] = [];
+    results.forEach((item) => {
+      item.services.forEach((linea) => {
+        if (!linea.code || vistos.has(linea.code)) return;
+        vistos.add(linea.code);
+        nuevos.push({ code: linea.code, name: linea.name, time: linea.time, price: linea.price });
+      });
     });
-    onUpdateOrder({
-      ...currentOrder,
-      services: [...(currentOrder.services ?? []), ...allServices],
-      diagnosisNotes: `Diagnóstico IA completo — ${new Date().toLocaleString('es-EC')}\n\n${allNotes}`,
-    });
-    setAdded(new Set(results.map((_, i) => i)));
-    setAddedToOS(true);
+    const allNotes = results
+      .map((item) => `[${item.category ?? item.estado}] ${item.description}`)
+      .join('\n');
+    try {
+      await guardarDiagnostico(
+        results,
+        [...(currentOrder.services ?? []), ...nuevos],
+        `Diagnóstico — ${new Date().toLocaleString('es-EC')}\n\n${allNotes}`,
+      );
+      setAdded(new Set(results.map((_, i) => i)));
+      setAddedToOS(true);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo agregar los servicios a la orden.');
+    }
   };
 
   const demoText = 'Ruidos en suspensión delantera derecha al pasar por baches. El aire acondicionado no enfría bien. Testigo de presión de llantas encendido.';
@@ -149,7 +148,7 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
         <div className="flex items-center justify-between">
           <div>
             <h1 className="page-title">Diagnóstico Asistido por IA</h1>
-            <p className="page-subtitle">Random Forest + LLM · 600 casos de entrenamiento · 10 categorías de falla</p>
+            <p className="page-subtitle">Random Forest · 42.175 quejas · 6 categorías y climatización por regla</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#22c55e' }} />
@@ -271,7 +270,7 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                   <span className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>Procesando con modelo Random Forest...</span>
                 </div>
                 <div className="space-y-1.5">
-                  {['Extrayendo síntomas del texto...', 'Clasificando con Random Forest (150 árboles)...', 'Generando explicación con LLM...'].map((step, i) => (
+                  {['Buscando síntomas en el catálogo...', 'Clasificando con Random Forest...', 'Armando servicios y explicación...'].map((step, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs" style={{ color: 'var(--accent)' }}>
                       <span className="w-4 h-4 rounded-full flex items-center justify-center text-white font-bold"
                         style={{ background: 'var(--accent)', fontSize: 9 }}>{i + 1}</span>
@@ -280,6 +279,9 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                   ))}
                 </div>
               </div>
+            )}
+            {error && (
+              <p className="text-xs mt-3 font-semibold" style={{ color: '#ef4444' }}>{error}</p>
             )}
           </div>
         </div>
@@ -299,17 +301,25 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                     Agregado a la orden
                   </span>
                 )}
-                {added.size < results.length && (
+                {results.some((item, idx) => (item.services?.length ?? 0) > 0 && !added.has(idx)) && (
                   <button className="btn-primary text-xs" onClick={addAllToOrder}>
-                    + Agregar todo a OS {selectedOS.replace('OS-2024-', '#')}
+                    + Agregar todo a {selectedOS}
                   </button>
                 )}
               </div>
             </div>
 
             {results.map((result, idx) => {
-              const m = priorityMeta[result.priority];
+              const m = (result.priority && priorityMeta[result.priority]) || {
+                color: 'var(--text-2)',
+                bg: 'var(--surface-3)',
+                border: 'var(--border)',
+              };
               const isAdded = added.has(idx);
+              const servicios = result.services ?? [];
+              const confianza = result.confidence == null
+                ? (result.category ? 'Regla' : '—')
+                : `${result.confidence}%`;
               return (
                 <div key={idx} className="card overflow-hidden">
                   <button
@@ -318,19 +328,21 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                     onClick={() => setExpanded(expanded === idx ? null : idx)}>
                     {/* Confidence */}
                     <div className="w-12 text-center shrink-0">
-                      <div className="text-xl font-bold" style={{ fontFamily: 'DM Sans, sans-serif', color: m.color }}>
-                        {result.confidence}%
+                      <div className={result.confidence == null ? 'text-sm font-bold' : 'text-xl font-bold'} style={{ fontFamily: 'DM Sans, sans-serif', color: m.color }}>
+                        {confianza}
                       </div>
                       <div className="text-[9px]" style={{ color: 'var(--text-3)' }}>confianza</div>
                     </div>
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{result.category}</span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded"
-                          style={{ color: m.color, background: m.bg, border: `1px solid ${m.border}` }}>
-                          Prioridad {result.priority}
-                        </span>
+                        <span className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>{result.category ?? result.estado ?? 'Sin categoría'}</span>
+                        {result.priority && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                            style={{ color: m.color, background: m.bg, border: `1px solid ${m.border}` }}>
+                            Prioridad {result.priority}
+                          </span>
+                        )}
                         {isAdded && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1"
                             style={{ color: '#22c55e', background: 'rgba(34,197,94,0.1)' }}>
@@ -341,7 +353,7 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                       </div>
                       <div className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>{result.description}</div>
                       <div className="mt-1.5 rounded-full h-1" style={{ background: 'var(--border)', width: 180 }}>
-                        <div className="h-1 rounded-full" style={{ width: `${result.confidence}%`, background: m.color }} />
+                        <div className="h-1 rounded-full" style={{ width: `${result.confidence ?? (result.category ? 100 : 0)}%`, background: m.color }} />
                       </div>
                     </div>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2.5" strokeLinecap="round"
@@ -353,11 +365,12 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                   {expanded === idx && (
                     <div className="px-4 py-4 space-y-4" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
                       {/* Services */}
+                      {servicios.length > 0 && (
                       <div>
                         <p className="section-title mb-2">Servicios Recomendados</p>
                         <div className="space-y-1.5">
-                          {result.services.map(s => (
-                            <div key={s.name} className="flex items-center justify-between text-xs px-3 py-2 rounded"
+                          {servicios.map(s => (
+                            <div key={s.code} className="flex items-center justify-between text-xs px-3 py-2 rounded"
                               style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                               <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{s.name}</span>
                               <div className="flex items-center gap-4" style={{ color: 'var(--text-2)' }}>
@@ -369,32 +382,33 @@ export default function Diagnosis({ orders, clients, vehicles, onUpdateOrder }: 
                         </div>
                         <p className="text-xs mt-1.5 font-semibold text-right" style={{ color: 'var(--text-2)' }}>
                           Total estimado: <span className="mono" style={{ color: 'var(--text-1)' }}>
-                            ${result.services.reduce((s, r) => s + r.price, 0).toFixed(2)}
+                            ${servicios.reduce((s, r) => s + r.price, 0).toFixed(2)}
                           </span>
                         </p>
                       </div>
+                      )}
                       {/* AI explanation */}
                       <div className="rounded-lg p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                         <div className="flex items-center gap-2 mb-2">
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round">
                             <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.14"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.14"/>
                           </svg>
-                          <span className="section-title">Explicación generada por IA</span>
+                          <span className="section-title">Explicación del diagnóstico</span>
                         </div>
                         <p className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>{result.explanation}</p>
                       </div>
                       {/* Actions */}
                       <div className="flex gap-2">
-                        {isAdded
+                        {servicios.length > 0 && (isAdded
                           ? <span className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded"
                               style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                              Agregado a {selectedOS.replace('OS-2024-', 'OS #')}
+                              Agregado a {selectedOS}
                             </span>
                           : <button className="btn-primary text-xs" onClick={() => addResultToOrder(result, idx)}>
-                              + Agregar a {selectedOS.replace('OS-2024-', 'OS #')}
+                              + Agregar a {selectedOS}
                             </button>
-                        }
+                        )}
                       </div>
                     </div>
                   )}

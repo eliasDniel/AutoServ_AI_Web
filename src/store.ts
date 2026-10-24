@@ -85,6 +85,29 @@ export interface PartLine {
   used: boolean;
 }
 
+export interface DiagnosisService {
+  code: string;
+  name: string;
+  time: string;
+  price: number;
+}
+
+export interface DiagnosisCard {
+  category: string | null;
+  confidence: number | null;
+  description: string;
+  priority: 'Alta' | 'Media' | 'Baja' | null;
+  services: DiagnosisService[];
+  explanation: string;
+  estado?: string;
+  fragmento?: string;
+}
+
+export interface SavedDiagnosis {
+  texto: string;
+  resultados: DiagnosisCard[];
+}
+
 export interface ServiceOrder {
   os: string;
   clientId: string;
@@ -107,6 +130,7 @@ export interface ServiceOrder {
   usedParts: PartLine[];
   signature?: string;
   diagnosisNotes?: string;
+  diagnosis?: SavedDiagnosis;
   payment?: {
     method: 'efectivo' | 'tarjeta' | 'mixto';
     cash?: number;

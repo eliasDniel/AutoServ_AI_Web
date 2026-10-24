@@ -212,6 +212,7 @@ export default function App() {
     const persisted: ServiceOrder = {
       ...updated,
       ...guardado.orden,
+      diagnosis: guardado.orden.diagnosis ?? updated.diagnosis,
       diagnosisNotes: updated.diagnosisNotes,
       payment: updated.payment,
     };

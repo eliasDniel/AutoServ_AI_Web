@@ -1,4 +1,4 @@
-import type { Client, OrderStatus, ServiceOrder, Vehicle } from '../src/store';
+import type { Client, DiagnosisCard, OrderStatus, ServiceOrder, Vehicle } from '../src/store';
 import { readSession } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -84,6 +84,7 @@ export async function guardarRecepcion(
       notasTecnico: order.techNotes,
       notasInspeccion: order.inspectionNotes,
       firmaDigital: order.signature,
+      ...(order.diagnosis ? { diagnostico: JSON.stringify(order.diagnosis) } : {}),
       partes: Object.entries(order.parts).map(([zona, ok]) => ({ zona, ok })),
       servicios: order.services.map((linea) => ({
         codigo: linea.code,
@@ -101,6 +102,15 @@ export async function guardarRecepcion(
     }),
   });
   return parse<{ cliente: Client; vehiculo: Vehicle; orden: ServiceOrder }>(response);
+}
+
+export async function diagnosticar(texto: string) {
+  const response = await fetch(`${API_URL}/diagnostico`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ texto }),
+  });
+  return parse<{ resultados: DiagnosisCard[] }>(response);
 }
 
 export async function reiniciarDatos() {
