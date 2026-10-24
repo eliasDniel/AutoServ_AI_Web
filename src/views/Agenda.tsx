@@ -6,8 +6,8 @@ interface AgendaProps {
   appointments: Appointment[];
   syncing?: boolean;
   onSync?: () => void;
-  onUpdateAppointment: (apt: Appointment) => void;
-  onAddAppointment: (apt: Appointment) => void;
+  onUpdateAppointment: (apt: Appointment) => void | Promise<void>;
+  onAddAppointment: (apt: Appointment) => void | Promise<void>;
   onConvertToOS: (apt: Appointment) => void;
 }
 
@@ -72,7 +72,7 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
 
   const setF = (k: keyof typeof blankForm, v: string) => setForm(p => ({ ...p, [k]: v }));
 
-  const submitNew = () => {
+  const submitNew = async () => {
     if (!form.clientName || !form.clientPhone || !form.plate || !form.service || !form.date || !form.mechanic) {
       setFormError('Completa todos los campos obligatorios.');
       return;
@@ -84,7 +84,12 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
       date: form.date, time: form.time, mechanic: form.mechanic,
       notes: form.notes, status: 'pendiente',
     };
-    onAddAppointment(newApt);
+    try {
+      await onAddAppointment(newApt);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'No se pudo guardar la cita.');
+      return;
+    }
     setForm(blankForm);
     setFormError('');
     setShowNewForm(false);

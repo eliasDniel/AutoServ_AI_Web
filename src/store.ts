@@ -24,28 +24,6 @@ export const mechanics = [
   { id: 'M4', name: 'Roberto Aguirre', specialty: 'Mecánica General',     avatar: 'RA' },
 ];
 
-// Sample appointments relative to today
-const today = new Date();
-const d = (offset: number, h = 0) => {
-  const dt = new Date(today);
-  dt.setDate(dt.getDate() + offset);
-  return {
-    date: dt.toISOString().slice(0, 10),
-    time: `${String(h).padStart(2, '0')}:00`,
-  };
-};
-
-export const initialAppointments: Appointment[] = [
-  { id: 'APT-001', clientName: 'María González', clientPhone: '099 123 4567', plate: 'PBC-1234', service: 'Cambio de aceite y filtro', ...d(0, 9),  mechanic: 'M1', notes: '',                              status: 'confirmada' },
-  { id: 'APT-002', clientName: 'Luis Hernández',  clientPhone: '098 234 5678', plate: 'MBB-9012', service: 'Alineación y balanceo',           ...d(0, 10), mechanic: 'M2', notes: 'Vibración al frenar',         status: 'confirmada' },
-  { id: 'APT-003', clientName: 'Ana Torres',       clientPhone: '096 456 7890', plate: 'MBC-7890', service: 'Revisión sistema A/C',            ...d(1, 9),  mechanic: 'M3', notes: 'El A/C no enfría bien',      status: 'pendiente'  },
-  { id: 'APT-004', clientName: 'Pedro Martínez',   clientPhone: '097 345 6789', plate: 'GAC-3456', service: 'Diagnóstico computarizado',       ...d(1, 11), mechanic: 'M1', notes: 'Testigo Check Engine',        status: 'pendiente'  },
-  { id: 'APT-005', clientName: 'Carlos Ramírez',   clientPhone: '095 567 8901', plate: 'GAD-2345', service: 'Cambio de pastillas de freno',    ...d(2, 10), mechanic: 'M2', notes: '',                              status: 'pendiente'  },
-  { id: 'APT-006', clientName: 'Rosa Vega',         clientPhone: '094 678 9012', plate: 'GAE-1122', service: 'Revisión general',               ...d(2, 14), mechanic: 'M4', notes: 'Ruido en suspensión',         status: 'confirmada' },
-  { id: 'APT-007', clientName: 'Diego Muñoz',       clientPhone: '093 789 0123', plate: 'GAB-5544', service: 'Cambio de aceite y filtro',      ...d(3, 9),  mechanic: 'M3', notes: '',                              status: 'pendiente'  },
-  { id: 'APT-008', clientName: 'Elena Suárez',      clientPhone: '092 890 1234', plate: 'PBD-3321', service: 'Alineación y balanceo',          ...d(3, 15), mechanic: 'M1', notes: 'También revisar llantas',     status: 'pendiente'  },
-];
-
 export interface Client {
   id: string;
   name: string;
@@ -151,6 +129,10 @@ export interface InventoryItem {
   max: number;
   price: number;
   rotation: 'Alta' | 'Media' | 'Baja';
+  demanda30?: number;
+  coberturaDias?: number | null;
+  sugerido?: number;
+  movimientos?: { type: 'entrada' | 'salida'; qty: number; date: string; note: string }[];
 }
 
 export const initialClients: Client[] = [

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { appointments as aptApi } from '../../utils/supabase/api';
+import { reservarCitaPublica } from '../../utils/recepcion';
 
 const WHATSAPP_NUMBER = '593997328741'; // ← cambia por el número real del taller
 
@@ -71,7 +71,13 @@ export default function LandingPage({ onStaffClick }: LandingPageProps) {
       notes: form.notes,
       status: 'pendiente' as const,
     };
-    await aptApi.save(appointment); // intenta guardar en Supabase (puede fallar si no está desplegado)
+    try {
+      await reservarCitaPublica(appointment);
+    } catch (error) {
+      setSending(false);
+      setFormError(error instanceof Error ? error.message : 'No se pudo reservar la cita.');
+      return;
+    }
     setSending(false);
     // Siempre mostrar éxito — la cita llega al sistema cuando el asesor sincroniza la Agenda
     setSent(true);

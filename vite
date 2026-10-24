@@ -1,0 +1,152 @@
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vite.config.ts:21:30). Use `import.meta.dirname` instead
+  - JSON import "./.figma/make/site.json" without import attributes (vite.config.ts:6:31). Add `with { type: 'json' }`
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+  VITE v8.3.5  ready in 227 ms
+
+  ➜  Local:   http://localhost:8443/
+  ➜  Network: http://192.168.100.129:8443/  en1
+  ➜  press h + enter to show help
+9:58:49 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+9:58:49 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+9:58:49 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+9:58:49 AM [vite] (client) hmr update /src/App.tsx, /src/index0:01:31 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:01:31 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:01:31 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:01:31 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:01:36 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:01:36 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:01:36 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:01:36 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:06:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:10:53 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css (x2)
+10:10:53 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css (x3)
+10:10:54 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:10:55 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css (x2)
+10:11:09 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:11:09 AM [vite] Internal server error: Transform failed with 4 errors:
+
+[PARSE_ERROR] Identifier `cambiarEstado` has already been declared
+   ╭─[ src/App.tsx:3:10 ]
+   │
+ 3 │ import { cambiarEstado, guardarRecepcion, listarRecepcion, reiniciarDatos } from '../utils/recepcion';
+   │          ──────┬──────  
+   │                ╰──────── `cambiarEstado` has already been declared here
+   │ 
+ 5 │   cambiarEstado, crearRepuesto, eliminarOrden, guardarCita, guardarRecepcion,
+   │   ──────┬──────  
+   │         ╰──────── It can not be redeclared here
+───╯
+
+[PARSE_ERROR] Identifier `guardarRecepcion` has already been declared
+   ╭─[ src/App.tsx:3:25 ]
+   │
+ 3 │ import { cambiarEstado, guardarRecepcion, listarRecepcion, reiniciarDatos } from '../utils/recepcion';
+   │                         ────────┬───────  
+   │                                 ╰──                                              ────────┬───────  
+   │                                                                     ╰───────── It can not be redeclared here
+───╯
+
+[PARSE_ERROR] Identifier `listarRecepcion` has already been declared
+   ╭─[ src/App.tsx:3:43 ]
+   │
+ 3 │ import { cambiarEstado, guardarRecepcion, listarRecepcion, reiniciarDatos } from '../utils/recepcion';
+   │                                           ───────┬───────  
+   │                                                  ╰───────── `listarRecepcion` has already been declared here
+   │ 
+ 6 │   listarCitas, listarInventario, listarRecepcion, moverInventario, reiniciarDatos,
+   │                                  ───────┬───────  
+   │                                         ╰───────── It can not be n, reiniciarDatos } from '../utils/recepcion';
+   │                                                            ───────┬──────  
+   │                                                                   ╰──────── `reiniciarDatos` has already been declared here
+   │ 
+ 6 │   listarCitas, listarInventario, listarRecepcion, moverInventario, reiniciarDatos,
+   │                                                                    ───────┬──────  
+   │                                                                           ╰──────── It can not be redeclared here
+───╯
+
+  Plugin: vite:oxc
+  File: /Users/gareth/Projects/AutoServ_AI_Web/src/App.tsx
+      at transformWithOxc (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:7618:19)
+      at TransformPluginContext.transform (file://luginContainer.transform (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:8582:51)
+      at async loadAndTransform (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:20155:26)
+      at async viteTransformMiddleware (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:20375:20)
+10:11:15 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:11:16 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x2)
+10:11:16 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x3)
+10:11:16 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x4)
+10:11:17 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x5)
+10:11:17 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x6)
+10:11:17 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x7)
+10:11:18 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x8)
+10:11:18 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x9)
+10:11:19 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x10)
+10:11:31 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x11)
+10:11:31 AM [vite] (client) hmr update /src/App.tsx, /src/index.css (x12)
+10:11:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/index.css
+10:11:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:12:57 AM [vite] (client) hmr update /src/views/Agenda.tsx, /src/index.css
+10:12:58 AM [vite] (client) hmr update /src/views/Agenda.tsx, /src/index.css (x2)
+10:12:58 AM [vite] Internal server error: Transform failed with 1 error:
+
+[PARSE_ERROR] `await` is only allowed within async functions and at the top levels of modules
+    ╭─[ src/views/Agenda.tsx:88:7 ]
+    │
+ 88 │       await onAddAppointment(newApt);
+    │       ──┬──  
+    │         ╰──── 
+    │ 
+    │ Help: Either remove this `await` or add the `async` keyword to the enclosing function
+────╯
+
+  Plugin: vite:oxc
+  File: /Users/gareth/Projects/AutoServ_AI_Web/src/views/Agenda.tsx
+      at transformWithOxc (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:7618:19)
+      at TransformPluginContext.transform (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:7690:26)
+      at EnvironmentPluginContainer.transform (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:8582Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:20155:26)
+      at async viteTransformMiddleware (file:///Users/gareth/Projects/AutoServ_AI_Web/node_modules/vite/dist/node/chunks/node.js:20375:20)
+10:12:58 AM [vite] (client) hmr update /src/index.css
+10:12:58 AM [vite] (client) hmr update /src/views/Agenda.tsx, /src/index.css
+10:12:58 AM [vite] (client) hmr update /src/index.css
+10:13:09 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css
+10:13:10 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x2)
+10:13:10 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x3)
+10:13:10 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x4)
+10:13:10 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x5)
+10:13:11 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x6)
+10:13:12 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css (x7)
+10:13:30 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:13:41 AM [vite] (client) page reload utils/supabase/api.ts
+10:13:41 AM [vite] (client) hmr update /src/index.css
+10:13:41 AM [vite] (client) page reload utils/supabase/info.tsx
+10:13:41 AM [vite] (client) hmr update /src/index.css
+10:13:41 AM [vite] (client) hmr update /src/index.css (x2)
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Agenda.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/views/Inventory.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Agenda.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Diagnosis.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/views/Inventory.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Reception.tsx, /src/views/Agenda.tsx, /src/index.css
+10:16:34 AM [vite] (client) hmr update /src/App.tsx, /src/views/Diagnosis.tsx, /src/views/Inventory.tsx, /src/index.css

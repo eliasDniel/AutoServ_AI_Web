@@ -1,19 +1,12 @@
 import { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import type { InventoryItem } from '../store';
+import { crearRepuesto, moverInventario } from '../../utils/recepcion';
 
 interface InventoryProps {
   inventory: InventoryItem[];
   onUpdateInventory: (items: InventoryItem[]) => void;
   role?: string;
 }
-
-const demandForecast = [
-  { mes: 'Ene', real: 28, pred: null }, { mes: 'Feb', real: 32, pred: null },
-  { mes: 'Mar', real: 25, pred: null }, { mes: 'Abr', real: 38, pred: null },
-  { mes: 'May', real: 30, pred: 30 }, { mes: 'Jun', real: null, pred: 35 },
-  { mes: 'Jul', real: null, pred: 41 }, { mes: 'Ago', real: null, pred: 38 },
-];
 
 const rotationColor: Record<string, { background: string; color: string }> = {
   Alta:  { background: 'rgba(34,197,94,0.15)',  color: '#16a34a' },
@@ -22,7 +15,6 @@ const rotationColor: Record<string, { background: string; color: string }> = {
 };
 
 type MovementType = 'entrada' | 'salida';
-interface Movement { type: MovementType; qty: number; date: string; note: string; }
 
 interface NewPart { name: string; category: string; stock: string; min: string; max: string; price: string; rotation: 'Alta' | 'Media' | 'Baja'; }
 
@@ -38,7 +30,6 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
   const [showPurchaseOrder, setShowPurchaseOrder] = useState(false);
   const [newPart, setNewPart] = useState<NewPart>({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' });
   const [savedPart, setSavedPart] = useState(false);
-  const [movements, setMovements] = useState<Record<string, Movement[]>>({});
 
   const selected = inventory.find(p => p.code === selectedCode) ?? inventory[0];
   const categories = ['all', ...Array.from(new Set(inventory.map(i => i.category)))];
@@ -51,31 +42,38 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
 
   const alerts = inventory.filter(p => p.stock < p.min);
 
-  const addNewPart = () => {
+  const addNewPart = async () => {
     if (!newPart.name.trim()) return;
-    const code = `REP-${String(inventory.length + 1).padStart(3, '0')}`;
-    onUpdateInventory([...inventory, {
-      code, name: newPart.name, category: newPart.category,
-      stock: parseInt(newPart.stock) || 0, min: parseInt(newPart.min) || 5,
-      max: parseInt(newPart.max) || 20, price: parseFloat(newPart.price) || 0,
-      rotation: newPart.rotation,
-    }]);
-    setSavedPart(true);
-    setTimeout(() => { setShowNewPart(false); setSavedPart(false); setNewPart({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' }); }, 1200);
+    try {
+      onUpdateInventory(await crearRepuesto({
+        nombre: newPart.name,
+        categoria: newPart.category,
+        stock: parseInt(newPart.stock) || 0,
+        min: parseInt(newPart.min) || 5,
+        max: parseInt(newPart.max) || 20,
+        precio: parseFloat(newPart.price) || 0,
+      }));
+      setSavedPart(true);
+      setTimeout(() => { setShowNewPart(false); setSavedPart(false); setNewPart({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' }); }, 1200);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo crear el repuesto.');
+    }
   };
 
-  const applyMovement = () => {
+  const applyMovement = async () => {
     const qty = parseInt(movQty) || 0;
-    if (qty <= 0) return;
-    onUpdateInventory(inventory.map(p => p.code === selected.code
-      ? { ...p, stock: showModal === 'entrada' ? p.stock + qty : Math.max(0, p.stock - qty) }
-      : p
-    ));
-    setMovements(prev => ({
-      ...prev,
-      [selected.code]: [...(prev[selected.code] ?? []), { type: showModal!, qty, date: new Date().toLocaleDateString('es-EC'), note: movNote }],
-    }));
-    setShowModal(null); setMovQty('1'); setMovNote('');
+    if (qty <= 0 || !showModal) return;
+    try {
+      onUpdateInventory(await moverInventario({
+        codigo: selected.code,
+        tipo: showModal,
+        cantidad: qty,
+        nota: movNote,
+      }));
+      setShowModal(null); setMovQty('1'); setMovNote('');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.');
+    }
   };
 
   return (
@@ -272,10 +270,10 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
               {isAdmin && <button className="btn-secondary text-xs flex-1 justify-center" onClick={() => setShowModal('salida')}>📤 Salida</button>}
             </div>
             {/* Movement history */}
-            {(movements[selected.code]?.length ?? 0) > 0 && (
+            {(selected.movimientos?.length ?? 0) > 0 && (
               <div className="mt-3 border-t border-slate-100 pt-2">
                 <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Movimientos</div>
-                {movements[selected.code].slice(-4).map((m, i) => (
+                {selected.movimientos!.slice(0, 4).map((m, i) => (
                   <div key={i} className="flex items-center gap-1.5 text-[10px] py-0.5">
                     <span className={m.type === 'entrada' ? 'text-green-600' : 'text-red-500'}>{m.type === 'entrada' ? '▲' : '▼'}</span>
                     <span className="font-semibold">{m.qty} uds.</span>
@@ -293,20 +291,17 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
               <span>🤖</span>
               <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide">Predicción de Demanda</h3>
             </div>
-            <p className="text-[10px] text-slate-400 mb-3">Machine Learning · próximos 3 meses</p>
-            <ResponsiveContainer width="100%" height={130}>
-              <LineChart data={demandForecast}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-                <ReferenceLine x="May" stroke="#94a3b8" strokeDasharray="4 2" />
-                <Line type="monotone" dataKey="real" stroke="#1e40af" strokeWidth={2} dot={{ r: 3, fill: '#1e40af' }} name="Real" connectNulls={false} />
-                <Line type="monotone" dataKey="pred" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3, fill: '#f59e0b' }} name="Predicción" connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-            <div className="mt-3 bg-amber-50 border border-amber-200 rounded p-2 text-[10px] text-amber-700">
-              <strong>IA recomienda:</strong> Comprar 25 uds. antes del 15/06 para evitar desabastecimiento (demanda proyectada Jul: 41 uds).
+            <p className="text-[10px] text-slate-400 mb-3">Según el consumo real de los últimos 30 días</p>
+            <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+              <div><div className="text-slate-400 text-[10px]">Consumo 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
+              <div><div className="text-slate-400 text-[10px]">Proyección 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
+              <div><div className="text-slate-400 text-[10px]">Cobertura</div><div className="font-semibold">{selected.coberturaDias == null ? 'Sin consumo' : `${selected.coberturaDias} días`}</div></div>
+              <div><div className="text-slate-400 text-[10px]">Comprar</div><div className="font-semibold">{selected.sugerido ?? 0} uds.</div></div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[10px] text-amber-700">
+              {(selected.demanda30 ?? 0) > 0
+                ? `A este ritmo se usan ${selected.demanda30} uds. al mes. Conviene comprar ${selected.sugerido ?? 0} para quedar sobre el mínimo.`
+                : 'Todavía no hay salidas de este repuesto. La sugerencia usa solo el stock mínimo.'}
             </div>
           </div>
         </div>

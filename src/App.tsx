@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { clearSession, readSession } from '../utils/auth';
-import { cambiarEstado, guardarRecepcion, listarRecepcion, reiniciarDatos } from '../utils/recepcion';
-import * as api from '../utils/supabase/api';
+import {
+  cambiarEstado, eliminarOrden, guardarCita, guardarRecepcion,
+  listarCitas, listarInventario, listarRecepcion, reiniciarDatos,
+} from '../utils/recepcion';
 import NavSidebar from './components/NavSidebar';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
@@ -19,7 +21,7 @@ import DatabaseSchema from './views/DatabaseSchema';
 import Agenda from './views/Agenda';
 import PaymentModal from './components/PaymentModal';
 import {
-  initialClients, initialVehicles, initialOrders, initialInventory, initialAppointments,
+  initialClients, initialVehicles, initialOrders, initialInventory,
   type ServiceOrder, type InventoryItem, type Client, type Vehicle,
   type View, type Role, type Appointment,
 } from './store';
@@ -67,20 +69,15 @@ export default function App() {
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [syncingApts, setSyncingApts] = useState(false);
 
   const syncAppointments = useCallback(async () => {
     setSyncingApts(true);
     try {
-      const remote = await api.appointments.list();
-      if (remote.length > 0) {
-        setAppointments(prev => {
-          const existingIds = new Set(prev.map(a => a.id));
-          const newOnes = remote.filter(r => !existingIds.has(r.id));
-          return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
-        });
-      }
+      setAppointments(await listarCitas());
+    } catch {
+      return;
     } finally {
       setSyncingApts(false);
     }
@@ -101,9 +98,8 @@ export default function App() {
         setOrders(initialOrders);
         setSelectedOS(initialOrders[0].os);
       });
-    api.inventory.list().then((remoteInventory) => {
-      if (remoteInventory.length > 0) setInventory(remoteInventory);
-    });
+    listarInventario().then(setInventory).catch(() => undefined);
+    listarCitas().then(setAppointments).catch(() => undefined);
   }, [session]);
 
   // Sincronizar citas remotas cuando se abre la Agenda
@@ -130,6 +126,9 @@ export default function App() {
     setSelectedOS('');
     setDraftNewOrder(null);
     setPendingPaymentOS(null);
+    const [piezas, citas] = await Promise.all([listarInventario(), listarCitas()]);
+    setInventory(piezas);
+    setAppointments(citas);
   };
 
   const handleLogout = () => {
@@ -214,7 +213,7 @@ export default function App() {
       ...guardado.orden,
       diagnosis: guardado.orden.diagnosis ?? updated.diagnosis,
       diagnosisNotes: updated.diagnosisNotes,
-      payment: updated.payment,
+      payment: guardado.orden.payment ?? updated.payment,
     };
     setClients((prev) => upsertById(prev, guardado.cliente).filter((item) => (
       item.id === guardado.cliente.id || !mismoContacto(item, guardado.cliente)
@@ -250,9 +249,9 @@ export default function App() {
     if (!pendingPaymentOS) return;
     const numero = pendingPaymentOS;
     try {
-      await cambiarEstado(numero, 'terminada');
+      const updated = await cambiarEstado(numero, 'terminada', payment);
       setOrders((prev) => prev.map((item) => (
-        item.os === numero ? { ...item, status: 'terminada', payment } : item
+        item.os === numero ? { ...item, ...updated, status: 'terminada', payment: updated.payment ?? payment } : item
       )));
       setPendingPaymentOS(null);
     } catch (error) {
@@ -367,7 +366,14 @@ export default function App() {
               onSelectOS={selectOS}
               onNavigate={navigate}
               onOpenOrder={os => { setDraftNewOrder(null); setSelectedOS(os); setView('reception'); }}
-              onDeleteOrder={os => { api.orders.remove(os); setOrders(prev => prev.filter(o => o.os !== os)); }}
+              onDeleteOrder={async (os) => {
+                try {
+                  await eliminarOrden(os);
+                  setOrders(prev => prev.filter(o => o.os !== os));
+                } catch (error) {
+                  window.alert(error instanceof Error ? error.message : 'No se pudo eliminar la orden.');
+                }
+              }}
             />
           )}
           {view === 'workshop' && (
@@ -390,8 +396,18 @@ export default function App() {
               appointments={appointments}
               syncing={syncingApts}
               onSync={syncAppointments}
-              onUpdateAppointment={apt => setAppointments(prev => prev.map(a => a.id === apt.id ? apt : a))}
-              onAddAppointment={apt => setAppointments(prev => [apt, ...prev])}
+              onUpdateAppointment={async (apt) => {
+                try {
+                  const guardada = await guardarCita(apt);
+                  setAppointments(prev => prev.map(a => a.id === apt.id ? guardada : a));
+                } catch (error) {
+                  window.alert(error instanceof Error ? error.message : 'No se pudo guardar la cita.');
+                }
+              }}
+              onAddAppointment={async (apt) => {
+                const guardada = await guardarCita(apt);
+                setAppointments(prev => [guardada, ...prev.filter(a => a.id !== apt.id)]);
+              }}
               onConvertToOS={apt => {
                 const nextNum = String(orders.length + 568).padStart(6, '0');
                 const osId = `OS-2024-${nextNum}`;

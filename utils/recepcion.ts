@@ -1,4 +1,4 @@
-import type { Client, DiagnosisCard, OrderStatus, ServiceOrder, Vehicle } from '../src/store';
+import type { Appointment, Client, DiagnosisCard, InventoryItem, OrderStatus, ServiceOrder, Vehicle } from '../src/store';
 import { readSession } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -121,14 +121,90 @@ export async function reiniciarDatos() {
   return parse<{ ok: boolean }>(response);
 }
 
-export async function cambiarEstado(numeroOs: string, estado: OrderStatus) {
+export async function cambiarEstado(
+  numeroOs: string,
+  estado: OrderStatus,
+  pago?: ServiceOrder['payment'],
+) {
   const response = await fetch(
     `${API_URL}/ordenes/${encodeURIComponent(numeroOs)}/estado`,
     {
       method: 'PATCH',
       headers: headers(),
-      body: JSON.stringify({ estado }),
+      body: JSON.stringify({
+        estado,
+        ...(pago ? { pago: JSON.stringify(pago) } : {}),
+      }),
     },
   );
   return parse<ServiceOrder>(response);
+}
+
+export async function eliminarOrden(numeroOs: string) {
+  const response = await fetch(`${API_URL}/ordenes/${encodeURIComponent(numeroOs)}`, {
+    method: 'DELETE',
+    headers: headers(),
+  });
+  return parse<{ ok: boolean }>(response);
+}
+
+export async function listarInventario() {
+  const response = await fetch(`${API_URL}/inventario`, { headers: headers() });
+  return parse<InventoryItem[]>(response);
+}
+
+export async function moverInventario(movimiento: { codigo: string; tipo: 'entrada' | 'salida'; cantidad: number; nota?: string }) {
+  const response = await fetch(`${API_URL}/inventario/movimiento`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(movimiento),
+  });
+  return parse<InventoryItem[]>(response);
+}
+
+export async function crearRepuesto(repuesto: { nombre: string; categoria: string; stock: number; min: number; max: number; precio: number }) {
+  const response = await fetch(`${API_URL}/inventario`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(repuesto),
+  });
+  return parse<InventoryItem[]>(response);
+}
+
+function citaBody(cita: Appointment) {
+  return {
+    ...( /^\d+$/.test(cita.id) ? { id: Number(cita.id) } : {}),
+    nombreCliente: cita.clientName,
+    telefono: cita.clientPhone,
+    placa: cita.plate,
+    servicio: cita.service,
+    fecha: cita.date,
+    hora: cita.time,
+    mecanico: cita.mechanic,
+    notas: cita.notes,
+    estado: cita.status,
+  };
+}
+
+export async function listarCitas() {
+  const response = await fetch(`${API_URL}/citas`, { headers: headers() });
+  return parse<Appointment[]>(response);
+}
+
+export async function guardarCita(cita: Appointment) {
+  const response = await fetch(`${API_URL}/citas`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(citaBody(cita)),
+  });
+  return parse<Appointment>(response);
+}
+
+export async function reservarCitaPublica(cita: Appointment) {
+  const response = await fetch(`${API_URL}/citas/publica`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(citaBody(cita)),
+  });
+  return parse<Appointment>(response);
 }
