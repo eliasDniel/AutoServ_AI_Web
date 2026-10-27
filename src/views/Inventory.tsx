@@ -48,7 +48,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
-            <p className="text-xs text-slate-500">Stock en Postgres · Proyección por consumo de 30 días</p>
+            <p className="text-xs text-slate-500">Stock en Postgres · Predicción de demanda (Random Forest)</p>
           </div>
           {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
         </div>
@@ -123,7 +123,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
-          <p className="text-xs text-slate-500">Stock en Postgres · Proyección por consumo de 30 días</p>
+          <p className="text-xs text-slate-500">Stock en Postgres · Predicción de demanda (Random Forest)</p>
         </div>
         {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
       </div>
