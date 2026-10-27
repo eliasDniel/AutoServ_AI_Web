@@ -133,6 +133,7 @@ export interface InventoryItem {
   demanda30?: number;
   coberturaDias?: number | null;
   sugerido?: number;
+  fuente?: 'local' | 'stub' | 'modelo' | string;
   movimientos?: { type: 'entrada' | 'salida'; qty: number; date: string; note: string }[];
 }
 

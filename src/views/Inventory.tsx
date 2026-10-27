@@ -333,16 +333,22 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
               <span>🤖</span>
               <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide">Proyección de demanda</h3>
             </div>
-            <p className="text-[10px] text-slate-400 mb-3">Heurística por salidas reales (el modelo ML se enchufará después)</p>
+            <p className="text-[10px] text-slate-400 mb-3">
+              {selected.fuente === 'modelo'
+                ? 'Modelo de demanda · ms-ia'
+                : selected.fuente === 'stub'
+                  ? 'Stub en ms-ia (listo para el joblib)'
+                  : 'Proyección local de ms-core (fallback)'}
+            </p>
             <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-              <div><div className="text-slate-400 text-[10px]">Consumo 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
-              <div><div className="text-slate-400 text-[10px]">Proyección 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
+              <div><div className="text-slate-400 text-[10px]">Demanda 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
+              <div><div className="text-slate-400 text-[10px]">Fuente</div><div className="font-semibold">{selected.fuente ?? 'local'}</div></div>
               <div><div className="text-slate-400 text-[10px]">Cobertura</div><div className="font-semibold">{selected.coberturaDias == null ? 'Sin consumo' : `${selected.coberturaDias} días`}</div></div>
               <div><div className="text-slate-400 text-[10px]">Comprar</div><div className="font-semibold">{selected.sugerido ?? 0} uds.</div></div>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[10px] text-amber-700">
               {(selected.demanda30 ?? 0) > 0
-                ? `A este ritmo se usan ${selected.demanda30} uds. al mes. Conviene comprar ${selected.sugerido ?? 0} para quedar sobre el mínimo.`
+                ? `Proyección: ${selected.demanda30} uds. en 30 días. Conviene comprar ${selected.sugerido ?? 0} para quedar sobre el mínimo.`
                 : 'Todavía no hay salidas de este repuesto. La sugerencia usa solo el stock mínimo.'}
             </div>
           </div>
