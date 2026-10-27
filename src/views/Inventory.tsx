@@ -42,6 +42,48 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
 
   const alerts = inventory.filter(p => p.stock < p.min);
 
+  if (!selected) {
+    return (
+      <div className="p-5 overflow-y-auto h-full space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
+            <p className="text-xs text-slate-500">Stock en Postgres · Proyección por consumo de 30 días</p>
+          </div>
+          {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
+        </div>
+        {showNewPart && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewPart(false)}>
+            <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
+              <h3 className="text-sm font-bold text-slate-700 mb-4">Nuevo Repuesto</h3>
+              <div className="space-y-3">
+                <div><label className="form-label">Nombre del Repuesto *</label>
+                  <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={newPart.name} onChange={e => setNewPart(p => ({ ...p, name: e.target.value }))} /></div>
+                <div><label className="form-label">Categoría</label>
+                  <select className="form-select" value={newPart.category} onChange={e => setNewPart(p => ({ ...p, category: e.target.value }))}>
+                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión'].map(c => <option key={c}>{c}</option>)}
+                  </select></div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="form-label">Stock</label><input className="form-input" type="number" value={newPart.stock} onChange={e => setNewPart(p => ({ ...p, stock: e.target.value }))} /></div>
+                  <div><label className="form-label">Mín</label><input className="form-input" type="number" value={newPart.min} onChange={e => setNewPart(p => ({ ...p, min: e.target.value }))} /></div>
+                  <div><label className="form-label">Máx</label><input className="form-input" type="number" value={newPart.max} onChange={e => setNewPart(p => ({ ...p, max: e.target.value }))} /></div>
+                </div>
+                <div><label className="form-label">Precio</label><input className="form-input" type="number" step="0.01" value={newPart.price} onChange={e => setNewPart(p => ({ ...p, price: e.target.value }))} /></div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button className="btn-primary flex-1 justify-center text-xs" onClick={addNewPart}>{savedPart ? '✓ Guardado' : 'Crear'}</button>
+                <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewPart(false)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="bg-white rounded-lg border border-slate-200 p-6 text-xs text-slate-500">
+          No hay repuestos en el servidor. Crea uno o espera a que ms-core cargue el catálogo.
+        </div>
+      </div>
+    );
+  }
+
   const addNewPart = async () => {
     if (!newPart.name.trim()) return;
     try {
@@ -81,7 +123,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
-          <p className="text-xs text-slate-500">Gestión de stock · Predicción de demanda ML · Alertas inteligentes</p>
+          <p className="text-xs text-slate-500">Stock en Postgres · Proyección por consumo de 30 días</p>
         </div>
         {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
       </div>
@@ -289,9 +331,9 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <div className="flex items-center gap-1.5 mb-1">
               <span>🤖</span>
-              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide">Predicción de Demanda</h3>
+              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide">Proyección de demanda</h3>
             </div>
-            <p className="text-[10px] text-slate-400 mb-3">Según el consumo real de los últimos 30 días</p>
+            <p className="text-[10px] text-slate-400 mb-3">Heurística por salidas reales (el modelo ML se enchufará después)</p>
             <div className="grid grid-cols-2 gap-2 text-xs mb-3">
               <div><div className="text-slate-400 text-[10px]">Consumo 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>
               <div><div className="text-slate-400 text-[10px]">Proyección 30 días</div><div className="font-semibold">{selected.demanda30 ?? 0} uds.</div></div>

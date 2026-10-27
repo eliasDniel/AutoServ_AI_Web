@@ -85,8 +85,8 @@ const allGroups: Record<Role, NavGroup[]> = {
     {
       label: 'Gestión',
       items: [
-        { id: 'clients', label: 'Clientes' },
-        { id: 'parts',   label: 'Repuestos' },
+        { id: 'clients',   label: 'Clientes' },
+        { id: 'inventory', label: 'Inventario' },
       ],
     },
   ],

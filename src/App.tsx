@@ -21,7 +21,6 @@ import DatabaseSchema from './views/DatabaseSchema';
 import Agenda from './views/Agenda';
 import PaymentModal from './components/PaymentModal';
 import {
-  initialClients, initialVehicles, initialOrders, initialInventory,
   type ServiceOrder, type InventoryItem, type Client, type Vehicle,
   type View, type Role, type Appointment,
 } from './store';
@@ -68,7 +67,8 @@ export default function App() {
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [loadError, setLoadError] = useState('');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [syncingApts, setSyncingApts] = useState(false);
 
@@ -85,6 +85,7 @@ export default function App() {
 
   useEffect(() => {
     if (!session) return;
+    setLoadError('');
     listarRecepcion()
       .then((remote) => {
         setClients(remote.clientes);
@@ -92,14 +93,19 @@ export default function App() {
         setOrders(remote.ordenes);
         setSelectedOS(remote.ordenes[0]?.os ?? '');
       })
-      .catch(() => {
-        setClients(initialClients);
-        setVehicles(initialVehicles);
-        setOrders(initialOrders);
-        setSelectedOS(initialOrders[0].os);
+      .catch((error) => {
+        setClients([]);
+        setVehicles([]);
+        setOrders([]);
+        setSelectedOS('');
+        setLoadError(error instanceof Error ? error.message : 'No se pudo cargar la recepción.');
       });
-    listarInventario().then(setInventory).catch(() => undefined);
-    listarCitas().then(setAppointments).catch(() => undefined);
+    listarInventario()
+      .then(setInventory)
+      .catch(() => setInventory([]));
+    listarCitas()
+      .then(setAppointments)
+      .catch(() => setAppointments([]));
   }, [session]);
 
   // Sincronizar citas remotas cuando se abre la Agenda
@@ -260,6 +266,11 @@ export default function App() {
   };
 
   const navigate = (v: View) => {
+    if (v === 'parts') {
+      setDraftNewOrder(null);
+      setView('inventory');
+      return;
+    }
     if (v === 'reception') {
       createNewOrder();
       return;
@@ -329,6 +340,11 @@ export default function App() {
           )}
 
         <main className="flex-1 overflow-hidden flex flex-col">
+          {loadError && (
+            <div className="mx-5 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {loadError}
+            </div>
+          )}
           {view === 'dashboard' && (
             <Dashboard
               orders={orders} clients={clients} vehicles={vehicles}
@@ -464,7 +480,7 @@ export default function App() {
               }}
             />
           )}
-          {(view === 'inventory' || view === 'parts') && (
+          {view === 'inventory' && (
             <Inventory inventory={inventory} onUpdateInventory={setInventory} role={role} />
           )}
           {view === 'clients' && (
