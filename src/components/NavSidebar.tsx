@@ -47,6 +47,7 @@ const allGroups: Record<Role, NavGroup[]> = {
         { id: 'orders',    label: 'Órdenes' },
         { id: 'workshop',  label: 'Taller' },
         { id: 'agenda',    label: 'Agenda' },
+        { id: 'diagnosis', label: 'Diagnóstico IA' },
       ],
     },
     {
