@@ -97,6 +97,7 @@ export interface ServiceOrder {
   fuelLevel: number;
   hasKey: boolean;
   hasAlarm: boolean;
+  vehicleKey?: string;
   authSigned: boolean;
   warranty: boolean;
   warrantyType: string;
@@ -107,7 +108,6 @@ export interface ServiceOrder {
   parts: Record<string, boolean>;
   services: ServiceLine[];
   usedParts: PartLine[];
-  signature?: string;
   diagnosisNotes?: string;
   diagnosis?: SavedDiagnosis;
   payment?: {

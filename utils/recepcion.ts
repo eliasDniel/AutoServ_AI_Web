@@ -76,6 +76,7 @@ export async function guardarRecepcion(
       nivelCombustible: order.fuelLevel,
       tieneLlaves: order.hasKey,
       tieneAlarma: order.hasAlarm,
+      claveVehiculo: order.vehicleKey || undefined,
       autorizacionFirmada: order.authSigned,
       garantiaVigente: order.warranty,
       tipoGarantia: order.warrantyType,
@@ -83,7 +84,6 @@ export async function guardarRecepcion(
       observacionesCliente: order.clientObservations,
       notasTecnico: order.techNotes,
       notasInspeccion: order.inspectionNotes,
-      firmaDigital: order.signature,
       ...(order.diagnosis ? { diagnostico: JSON.stringify(order.diagnosis) } : {}),
       partes: Object.entries(order.parts).map(([zona, ok]) => ({ zona, ok })),
       servicios: order.services.map((linea) => ({

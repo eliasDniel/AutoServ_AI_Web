@@ -102,11 +102,7 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
   const [saved, setSaved] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSig, setHasSig] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  const sigCanvasRef = useRef<HTMLCanvasElement>(null);
-  const sigLastPos = useRef<{ x: number; y: number } | null>(null);
   const savingRef = useRef(false);
 
   // Editable client/vehicle for new orders
@@ -125,52 +121,11 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
     setActiveTab('datos');
     setSaved(false);
     setVehiclePhoto(null);
-    setHasSig(false);
   }, [order.os]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setVehiclePhoto(URL.createObjectURL(file));
-  };
-
-  const getSigPos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = sigCanvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const src = 'touches' in e ? e.touches[0] : e;
-    return { x: (src.clientX - rect.left) * (canvas.width / rect.width), y: (src.clientY - rect.top) * (canvas.height / rect.height) };
-  };
-
-  const sigStart = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    setIsDrawing(true);
-    setHasSig(true);
-    const pos = getSigPos(e);
-    sigLastPos.current = pos;
-    const ctx = sigCanvasRef.current!.getContext('2d')!;
-    ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y);
-  };
-
-  const sigMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    if (!isDrawing || !sigLastPos.current) return;
-    const pos = getSigPos(e);
-    const ctx = sigCanvasRef.current!.getContext('2d')!;
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    sigLastPos.current = pos;
-  };
-
-  const sigEnd = () => { setIsDrawing(false); sigLastPos.current = null; };
-
-  const clearSig = () => {
-    const canvas = sigCanvasRef.current!;
-    canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSig(false);
-    update({ signature: undefined });
   };
 
   const printOS = () => window.print();
@@ -216,16 +171,8 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
     if (savingRef.current) return draft;
     savingRef.current = true;
     try {
-      const firma = hasSig && sigCanvasRef.current
-        ? sigCanvasRef.current.toDataURL('image/png')
-        : draft.signature;
-      const next: ServiceOrder = {
-        ...draft,
-        signature: firma,
-        authSigned: draft.authSigned || Boolean(firma),
-      };
       const savedOrder = await onSave(
-        next,
+        draft,
         { ...draftClient, id: draftClient.id || draft.clientId },
         {
           ...draftVehicle,
@@ -500,6 +447,17 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
                       </div>
                     </div>
                   ))}
+                  <div>
+                    <label className="form-label">CLAVE</label>
+                    <input
+                      className="form-input"
+                      type="text"
+                      maxLength={50}
+                      placeholder="Clave del vehículo (opcional)"
+                      value={draft.vehicleKey ?? ''}
+                      onChange={e => update({ vehicleKey: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -572,25 +530,6 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
                     <label className="form-label">Nro. Garantía</label>
                     <input className="form-input" value={draft.warrantyNum} onChange={e => update({ warrantyNum: e.target.value })} />
                   </div>
-                  <div className="col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="form-label mb-0">Firma Digital</label>
-                      {hasSig && (
-                        <button onClick={clearSig} className="text-[10px] text-red-400 hover:text-red-600">✕ Borrar firma</button>
-                      )}
-                    </div>
-                    <canvas
-                      ref={sigCanvasRef}
-                      width={400} height={80}
-                      className="w-full rounded border border-slate-200 bg-slate-50 cursor-crosshair touch-none"
-                      style={{ height: 80 }}
-                      onMouseDown={sigStart} onMouseMove={sigMove} onMouseUp={sigEnd} onMouseLeave={sigEnd}
-                      onTouchStart={sigStart} onTouchMove={sigMove} onTouchEnd={sigEnd}
-                    />
-                    {!hasSig && (
-                      <p className="text-[10px] text-slate-400 mt-1 text-center">Dibuja aquí la firma del cliente</p>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -632,6 +571,7 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
                 { l: 'Asesor', v: draft.advisor }, { l: 'Fecha', v: draft.date },
                 { l: 'Combustible', v: `${draft.fuelLevel}%` }, { l: 'Kilometraje', v: `${vehicle.km.toLocaleString()} km` },
                 { l: 'Llave entregada', v: draft.hasKey ? 'Sí' : 'No' }, { l: 'Control/Alarma', v: draft.hasAlarm ? 'Sí' : 'No' },
+                { l: 'Clave', v: draft.vehicleKey?.trim() ? draft.vehicleKey : '—' },
                 { l: 'Autorización firmada', v: draft.authSigned ? 'Sí' : 'No' }, { l: 'Garantía vigente', v: draft.warranty ? 'Sí' : 'No' },
               ].map(f => (
                 <div key={f.l}>
