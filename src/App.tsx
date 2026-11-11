@@ -14,6 +14,7 @@ import Orders from './views/Orders';
 import Workshop from './views/Workshop';
 import Diagnosis from './views/Diagnosis';
 import Inventory from './views/Inventory';
+import Services from './views/Services';
 import Clients from './views/Clients';
 import Reports from './views/Reports';
 import Config from './views/Config';
@@ -45,6 +46,7 @@ export default function App() {
     return saved ? defaultViewByRole[saved.role] : 'reception';
   });
   const [selectedOS, setSelectedOS] = useState('');
+  const [diagnosisOs, setDiagnosisOs] = useState('');
   const [pendingPaymentOS, setPendingPaymentOS] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -366,6 +368,12 @@ export default function App() {
               allOrders={orders}
               onSave={saveOrder}
               onAdvance={advanceOrder}
+              onGoDiagnosis={(os) => {
+                setDiagnosisOs(os);
+                setSelectedOS(os);
+                setDraftNewOrder(null);
+                setView('diagnosis');
+              }}
             />
             ) : (
               <div className="flex-1 flex items-center justify-center">
@@ -402,10 +410,12 @@ export default function App() {
           )}
           {view === 'diagnosis' && (
             <Diagnosis
+              key={diagnosisOs || 'diagnosis'}
               orders={orders}
               clients={clients}
               vehicles={vehicles}
               onUpdateOrder={saveOrder}
+              initialOs={diagnosisOs || selectedOS}
             />
           )}
           {view === 'agenda' && (
@@ -480,6 +490,9 @@ export default function App() {
                 setView('orders');
               }}
             />
+          )}
+          {view === 'services' && (
+            <Services role={role} />
           )}
           {view === 'inventory' && (
             <Inventory inventory={inventory} onUpdateInventory={setInventory} role={role} />

@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import type { ServiceOrder, Client, Vehicle, InventoryItem } from '../store';
-import { catalogServices } from '../store';
 
 const tabs = [
   { id: 'datos', label: 'Datos del Cliente y Vehículo', icon: '👤' },
   { id: 'recepcion', label: 'Recepción del Vehículo', icon: '🚗' },
-  { id: 'servicios', label: 'Servicios Solicitados', icon: '🔧' },
   { id: 'repuestos', label: 'Repuestos', icon: '⚙️' },
   { id: 'resumen', label: 'Resumen', icon: '📋' },
 ];
@@ -90,17 +88,17 @@ interface ReceptionProps {
     vehicle?: Vehicle,
   ) => Promise<ServiceOrder>;
   onAdvance: (os: string, status?: ServiceOrder['status']) => void;
+  onGoDiagnosis?: (os: string) => void;
   onCreateClientVehicle?: (c: Client, v: Vehicle, osId: string) => void;
   onUpdateClientVehicle?: (c: Client, v: Vehicle) => void;
 }
 
-export default function Reception({ order, client, vehicle, clients, vehicles, inventory, allOrders, onSave, onAdvance }: ReceptionProps) {
+export default function Reception({ order, client, vehicle, clients, vehicles, inventory, allOrders, onSave, onAdvance, onGoDiagnosis }: ReceptionProps) {
   const isNew = client.id === '';
 
   const [activeTab, setActiveTab] = useState('datos');
   const [draft, setDraft] = useState<ServiceOrder>({ services: [], usedParts: [], ...order });
   const [saved, setSaved] = useState(false);
-  const [showServiceModal, setShowServiceModal] = useState(false);
   const [vehiclePhoto, setVehiclePhoto] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
@@ -206,15 +204,11 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
   const saveAndAdvance = async () => {
     const savedOrder = await persist();
     if (savedOrder.os.startsWith('OS-2024-')) return;
+    if (savedOrder.status === 'recepcion' && onGoDiagnosis) {
+      onGoDiagnosis(savedOrder.os);
+      return;
+    }
     onAdvance(savedOrder.os, savedOrder.status);
-  };
-
-  const removeService = (code: string) => update({ services: draft.services.filter(s => s.code !== code) });
-
-  const addService = (svc: typeof catalogServices[0]) => {
-    if (draft.services.find(s => s.code === svc.code)) return;
-    update({ services: [...draft.services, svc] });
-    setShowServiceModal(false);
   };
 
   const toggleUsedPart = (code: string) =>
@@ -234,7 +228,7 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
 
   const statusMap: Record<string, string> = { recepcion: 'RECEPCIÓN', en_taller: 'EN TALLER', terminada: 'TERMINADA' };
   const statusClass: Record<string, string> = { recepcion: 'status-recepcion', en_taller: 'status-taller', terminada: 'status-terminada' };
-  const nextLabel: Record<string, string> = { recepcion: 'Enviar a Taller', en_taller: 'Marcar Terminada', terminada: '' };
+  const nextLabel: Record<string, string> = { recepcion: 'Continuar a Diagnóstico', en_taller: 'Marcar Terminada', terminada: '' };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -588,67 +582,6 @@ export default function Reception({ order, client, vehicle, clients, vehicles, i
               <label className="form-label">Observaciones de Inspección</label>
               <div className="bg-slate-50 rounded p-2 text-xs text-slate-600 border border-slate-200">{draft.inspectionNotes || '—'}</div>
             </div>
-          </div>
-        )}
-
-        {/* TAB: Servicios */}
-        {activeTab === 'servicios' && (
-          <div className="bg-white rounded-lg border border-slate-200">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Servicios Solicitados</h3>
-              <button className="btn-primary text-xs" onClick={() => setShowServiceModal(true)}>+ Agregar Servicio</button>
-            </div>
-            {showServiceModal && (
-              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowServiceModal(false)}>
-                <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
-                  <h3 className="text-sm font-bold text-slate-700 mb-3">Seleccionar Servicio</h3>
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
-                    {catalogServices.map(s => {
-                      const added = !!draft.services.find(x => x.code === s.code);
-                      return (
-                        <button key={s.code} disabled={added}
-                          onClick={() => addService(s)}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg text-xs flex items-center justify-between transition-colors ${added ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'hover:bg-blue-50 text-slate-700'}`}>
-                          <span>{s.name}</span>
-                          <span className="font-semibold">${s.price.toFixed(2)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button className="mt-3 btn-secondary w-full justify-center text-xs" onClick={() => setShowServiceModal(false)}>Cerrar</button>
-                </div>
-              </div>
-            )}
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50">
-                <tr>{['Código', 'Servicio', 'Tiempo Est.', 'Precio', ''].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase px-4 py-2">{h}</th>
-                ))}</tr>
-              </thead>
-              <tbody>
-                {draft.services.map(s => (
-                  <tr key={s.code} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-2.5 text-blue-600 font-medium">{s.code}</td>
-                    <td className="px-4 py-2.5 text-slate-700">{s.name}</td>
-                    <td className="px-4 py-2.5 text-slate-500">{s.time}</td>
-                    <td className="px-4 py-2.5 font-semibold">${s.price.toFixed(2)}</td>
-                    <td className="px-4 py-2.5">
-                      <button className="text-red-400 hover:text-red-600 text-sm" onClick={() => removeService(s.code)}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-                {draft.services.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-6 text-center text-slate-400 text-xs">No hay servicios agregados.</td></tr>
-                )}
-              </tbody>
-              <tfoot className="bg-slate-50 border-t border-slate-200">
-                <tr>
-                  <td colSpan={3} className="px-4 py-2 text-right text-xs font-bold text-slate-600">Total Servicios:</td>
-                  <td className="px-4 py-2 font-bold text-slate-800">${draft.services.reduce((s, v) => s + v.price, 0).toFixed(2)}</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
           </div>
         )}
 

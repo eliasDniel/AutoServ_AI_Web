@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { InventoryItem } from '../store';
-import { crearRepuesto, moverInventario } from '../../utils/recepcion';
+import { crearRepuesto, importarRepuestos, moverInventario } from '../../utils/recepcion';
+import { aCsv, descargarCsv, parsearCsv } from '../../utils/csv';
 
 interface InventoryProps {
   inventory: InventoryItem[];
@@ -30,6 +31,42 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
   const [showPurchaseOrder, setShowPurchaseOrder] = useState(false);
   const [newPart, setNewPart] = useState<NewPart>({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' });
   const [savedPart, setSavedPart] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const downloadCsv = () => {
+    const csv = aCsv(
+      ['codigo', 'nombre', 'categoria', 'stock', 'min', 'max', 'precio'],
+      inventory.map((p) => [p.code, p.name, p.category, p.stock, p.min, p.max, p.price]),
+    );
+    descargarCsv('inventario.csv', csv);
+  };
+
+  const onCsvFile = async (file: File) => {
+    try {
+      const texto = await file.text();
+      const filas = parsearCsv(texto)
+        .map((f) => ({
+          codigo: (f.codigo || f.code || '').trim(),
+          nombre: (f.nombre || f.name || '').trim(),
+          categoria: (f.categoria || f.category || 'General').trim(),
+          stock: Number.parseInt(f.stock || '0', 10) || 0,
+          min: Number.parseInt(f.min || f.minimo || '0', 10) || 0,
+          max: Number.parseInt(f.max || f.maximo || '0', 10) || 0,
+          precio: Number.parseFloat(f.precio || f.price || '0') || 0,
+        }))
+        .filter((f) => f.codigo && f.nombre);
+      if (filas.length === 0) {
+        window.alert('CSV sin filas válidas. Columnas: codigo,nombre,categoria,stock,min,max,precio');
+        return;
+      }
+      onUpdateInventory(await importarRepuestos(filas));
+      window.alert(`Se importaron / actualizaron ${filas.length} repuestos.`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo importar el CSV.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const selected = inventory.find(p => p.code === selectedCode) ?? inventory[0];
   const categories = ['all', ...Array.from(new Set(inventory.map(i => i.category)))];
@@ -41,48 +78,6 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
   });
 
   const alerts = inventory.filter(p => p.stock < p.min);
-
-  if (!selected) {
-    return (
-      <div className="p-5 overflow-y-auto h-full space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
-            <p className="text-xs text-slate-500">Stock en Postgres · Predicción de demanda (Random Forest)</p>
-          </div>
-          {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
-        </div>
-        {showNewPart && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewPart(false)}>
-            <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
-              <h3 className="text-sm font-bold text-slate-700 mb-4">Nuevo Repuesto</h3>
-              <div className="space-y-3">
-                <div><label className="form-label">Nombre del Repuesto *</label>
-                  <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={newPart.name} onChange={e => setNewPart(p => ({ ...p, name: e.target.value }))} /></div>
-                <div><label className="form-label">Categoría</label>
-                  <select className="form-select" value={newPart.category} onChange={e => setNewPart(p => ({ ...p, category: e.target.value }))}>
-                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión'].map(c => <option key={c}>{c}</option>)}
-                  </select></div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div><label className="form-label">Stock</label><input className="form-input" type="number" value={newPart.stock} onChange={e => setNewPart(p => ({ ...p, stock: e.target.value }))} /></div>
-                  <div><label className="form-label">Mín</label><input className="form-input" type="number" value={newPart.min} onChange={e => setNewPart(p => ({ ...p, min: e.target.value }))} /></div>
-                  <div><label className="form-label">Máx</label><input className="form-input" type="number" value={newPart.max} onChange={e => setNewPart(p => ({ ...p, max: e.target.value }))} /></div>
-                </div>
-                <div><label className="form-label">Precio</label><input className="form-input" type="number" step="0.01" value={newPart.price} onChange={e => setNewPart(p => ({ ...p, price: e.target.value }))} /></div>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button className="btn-primary flex-1 justify-center text-xs" onClick={addNewPart}>{savedPart ? '✓ Guardado' : 'Crear'}</button>
-                <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewPart(false)}>Cancelar</button>
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="bg-white rounded-lg border border-slate-200 p-6 text-xs text-slate-500">
-          No hay repuestos en el servidor. Crea uno o espera a que ms-core cargue el catálogo.
-        </div>
-      </div>
-    );
-  }
 
   const addNewPart = async () => {
     if (!newPart.name.trim()) return;
@@ -104,7 +99,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
 
   const applyMovement = async () => {
     const qty = parseInt(movQty) || 0;
-    if (qty <= 0 || !showModal) return;
+    if (!selected || qty <= 0 || !showModal) return;
     try {
       onUpdateInventory(await moverInventario({
         codigo: selected.code,
@@ -118,6 +113,58 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
     }
   };
 
+  if (!selected) {
+    return (
+      <div className="p-5 overflow-y-auto h-full space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
+            <p className="text-xs text-slate-500">Stock en Postgres · Predicción de demanda (Random Forest)</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <button className="btn-secondary text-xs" onClick={downloadCsv} disabled={inventory.length === 0}>Descargar CSV</button>
+            {isAdmin && (
+              <>
+                <button className="btn-secondary text-xs" onClick={() => fileRef.current?.click()}>Cargar CSV</button>
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void onCsvFile(f); }} />
+                <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>
+              </>
+            )}
+          </div>
+        </div>
+        {showNewPart && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewPart(false)}>
+            <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
+              <h3 className="text-sm font-bold text-slate-700 mb-4">Nuevo Repuesto</h3>
+              <div className="space-y-3">
+                <div><label className="form-label">Nombre del Repuesto *</label>
+                  <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={newPart.name} onChange={e => setNewPart(p => ({ ...p, name: e.target.value }))} /></div>
+                <div><label className="form-label">Categoría</label>
+                  <select className="form-select" value={newPart.category} onChange={e => setNewPart(p => ({ ...p, category: e.target.value }))}>
+                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión'].map(c => <option key={c}>{c}</option>)}
+                  </select></div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="form-label">Stock</label><input className="form-input" type="number" value={newPart.stock} onChange={e => setNewPart(p => ({ ...p, stock: e.target.value }))} /></div>
+                  <div><label className="form-label">Mín</label><input className="form-input" type="number" value={newPart.min} onChange={e => setNewPart(p => ({ ...p, min: e.target.value }))} /></div>
+                  <div><label className="form-label">Máx</label><input className="form-input" type="number" value={newPart.max} onChange={e => setNewPart(p => ({ ...p, max: e.target.value }))} /></div>
+                </div>
+                <div><label className="form-label">Precio</label><input className="form-input" type="number" step="0.01" value={newPart.price} onChange={e => setNewPart(p => ({ ...p, price: e.target.value }))} /></div>
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button className="btn-primary flex-1 justify-center text-xs" onClick={() => { void addNewPart(); }}>{savedPart ? '✓ Guardado' : 'Crear'}</button>
+                <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewPart(false)}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="bg-white rounded-lg border border-slate-200 p-6 text-xs text-slate-500">
+          No hay repuestos en el servidor. Crea uno o espera a que ms-core cargue el catálogo.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-5 overflow-y-auto h-full space-y-4">
       <div className="flex items-center justify-between">
@@ -125,7 +172,17 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
           <h1 className="text-lg font-bold text-slate-800" style={{ fontFamily: 'DM Sans, sans-serif' }}>Control de Inventario</h1>
           <p className="text-xs text-slate-500">Stock en Postgres · Predicción de demanda (Random Forest)</p>
         </div>
-        {isAdmin && <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>}
+        <div className="flex gap-2 flex-wrap">
+          <button className="btn-secondary text-xs" onClick={downloadCsv} disabled={inventory.length === 0}>Descargar CSV</button>
+          {isAdmin && (
+            <>
+              <button className="btn-secondary text-xs" onClick={() => fileRef.current?.click()}>Cargar CSV</button>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void onCsvFile(f); }} />
+              <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>
+            </>
+          )}
+        </div>
       </div>
 
       {alerts.length > 0 && (

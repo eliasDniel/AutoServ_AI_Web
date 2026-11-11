@@ -1,6 +1,6 @@
 export type OrderStatus = 'recepcion' | 'en_taller' | 'terminada';
 export type Role = 'admin' | 'asesor' | 'tecnico';
-export type View = 'dashboard' | 'reception' | 'orders' | 'workshop' | 'parts' | 'clients' | 'reports' | 'diagnosis' | 'inventory' | 'config' | 'dbschema' | 'agenda';
+export type View = 'dashboard' | 'reception' | 'orders' | 'workshop' | 'parts' | 'clients' | 'reports' | 'diagnosis' | 'inventory' | 'services' | 'config' | 'dbschema' | 'agenda';
 // `parts` se redirige a `inventory` en App; se mantiene por compatibilidad del menú antiguo.
 
 export type AppointmentStatus = 'pendiente' | 'confirmada' | 'cancelada';
@@ -80,6 +80,7 @@ export interface DiagnosisCard {
   explanation: string;
   estado?: string;
   fragmento?: string;
+  tipo?: 'preventivo' | 'correctivo' | string;
 }
 
 export interface SavedDiagnosis {
@@ -137,7 +138,8 @@ export interface InventoryItem {
   movimientos?: { type: 'entrada' | 'salida'; qty: number; date: string; note: string }[];
 }
 
-export const catalogServices = [
+/** Catálogo de respaldo si aún no carga /servicios. */
+export const catalogServices: ServiceLine[] = [
   { code: 'SRV-001', name: 'Cambio de aceite y filtro', time: '1h', price: 45 },
   { code: 'SRV-002', name: 'Revisión de suspensión delantera', time: '2h', price: 80 },
   { code: 'SRV-003', name: 'Revisión sistema A/C', time: '1.5h', price: 60 },

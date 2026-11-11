@@ -1,4 +1,4 @@
-import type { Appointment, Client, DiagnosisCard, InventoryItem, OrderStatus, ServiceOrder, Vehicle } from '../src/store';
+import type { Appointment, Client, DiagnosisCard, InventoryItem, OrderStatus, ServiceLine, ServiceOrder, Vehicle } from '../src/store';
 import { readSession } from './auth';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
@@ -104,13 +104,59 @@ export async function guardarRecepcion(
   return parse<{ cliente: Client; vehiculo: Vehicle; orden: ServiceOrder }>(response);
 }
 
-export async function diagnosticar(texto: string) {
+export async function diagnosticar(texto: string, kilometraje?: number) {
   const response = await fetch(`${API_URL}/diagnostico`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ texto }),
+    body: JSON.stringify({
+      texto,
+      ...(kilometraje != null && kilometraje >= 0 ? { kilometraje } : {}),
+    }),
   });
-  return parse<{ resultados: DiagnosisCard[] }>(response);
+  return parse<{
+    resultados: DiagnosisCard[];
+    preventivos?: DiagnosisCard[];
+    correctivos?: DiagnosisCard[];
+    kilometraje?: number | null;
+  }>(response);
+}
+
+export async function listarServicios() {
+  const response = await fetch(`${API_URL}/servicios`, { headers: headers() });
+  return parse<ServiceLine[]>(response);
+}
+
+export async function guardarServicio(servicio: {
+  codigo?: string;
+  nombre: string;
+  tiempo: string;
+  precio: number;
+}) {
+  const response = await fetch(`${API_URL}/servicios`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(servicio),
+  });
+  return parse<ServiceLine>(response);
+}
+
+export async function eliminarServicio(codigo: string) {
+  const response = await fetch(`${API_URL}/servicios/${encodeURIComponent(codigo)}`, {
+    method: 'DELETE',
+    headers: headers(),
+  });
+  return parse<{ ok: boolean }>(response);
+}
+
+export async function importarServicios(
+  filas: { codigo: string; nombre: string; tiempo: string; precio: number }[],
+) {
+  const response = await fetch(`${API_URL}/servicios/importar`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ filas }),
+  });
+  return parse<ServiceLine[]>(response);
 }
 
 export async function reiniciarDatos() {
@@ -162,11 +208,36 @@ export async function moverInventario(movimiento: { codigo: string; tipo: 'entra
   return parse<InventoryItem[]>(response);
 }
 
-export async function crearRepuesto(repuesto: { nombre: string; categoria: string; stock: number; min: number; max: number; precio: number }) {
+export async function crearRepuesto(repuesto: {
+  codigo?: string;
+  nombre: string;
+  categoria: string;
+  stock: number;
+  min: number;
+  max: number;
+  precio: number;
+}) {
   const response = await fetch(`${API_URL}/inventario`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(repuesto),
+  });
+  return parse<InventoryItem[]>(response);
+}
+
+export async function importarRepuestos(filas: {
+  codigo: string;
+  nombre: string;
+  categoria?: string;
+  stock?: number;
+  min?: number;
+  max?: number;
+  precio?: number;
+}[]) {
+  const response = await fetch(`${API_URL}/inventario/importar`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify({ filas }),
   });
   return parse<InventoryItem[]>(response);
 }
