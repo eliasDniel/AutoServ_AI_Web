@@ -40,8 +40,7 @@ export default function Config() {
         </div>
 
         <p className="text-[11px] text-slate-400">
-          Para crear usuarios usa el endpoint de administración o el seed de ms-auth.
-          Esta pantalla ya no guarda cambios locales falsos.
+          Para crear usuarios ve a Sistema → Usuarios (solo Administrador).
         </p>
       </div>
     </div>

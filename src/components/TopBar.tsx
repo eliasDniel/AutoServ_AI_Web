@@ -125,6 +125,7 @@ export default function TopBar({ currentView, onNavigate, role, darkMode, onTogg
   // Page title from current view
   const pageTitles: Partial<Record<View, string>> = {
     services: 'Servicios',
+    users: 'Usuarios',
     dashboard: 'Panel de Control',
     reception: 'Recepción de Vehículos',
     orders: 'Órdenes de Servicio',

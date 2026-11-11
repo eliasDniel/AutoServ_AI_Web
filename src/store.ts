@@ -1,6 +1,6 @@
 export type OrderStatus = 'recepcion' | 'en_taller' | 'terminada';
 export type Role = 'admin' | 'asesor' | 'tecnico';
-export type View = 'dashboard' | 'reception' | 'orders' | 'workshop' | 'parts' | 'clients' | 'reports' | 'diagnosis' | 'inventory' | 'services' | 'config' | 'dbschema' | 'agenda';
+export type View = 'dashboard' | 'reception' | 'orders' | 'workshop' | 'parts' | 'clients' | 'reports' | 'diagnosis' | 'inventory' | 'services' | 'users' | 'config' | 'dbschema' | 'agenda';
 // `parts` se redirige a `inventory` en App; se mantiene por compatibilidad del menú antiguo.
 
 export type AppointmentStatus = 'pendiente' | 'confirmada' | 'cancelada';

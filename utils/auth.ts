@@ -85,3 +85,62 @@ export function readSession(): AuthSession | null {
 export function clearSession() {
   localStorage.removeItem(STORAGE_KEY);
 }
+
+export const STAFF_ROLES = [
+  'Administrador',
+  'Asesor de Servicio',
+  'Técnico Mecánico',
+] as const;
+
+export type StaffRoleName = (typeof STAFF_ROLES)[number];
+
+export interface StaffUser {
+  id: number;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  rol: string;
+  activo: boolean;
+}
+
+function authHeaders() {
+  const session = readSession();
+  if (!session) throw new Error('La sesión expiró. Vuelve a ingresar.');
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.token}`,
+  };
+}
+
+async function parseAuth<T>(response: Response): Promise<T> {
+  const body = (await response.json().catch(() => ({}))) as T & {
+    message?: string | string[];
+  };
+  if (!response.ok) {
+    const message = Array.isArray(body.message) ? body.message[0] : body.message;
+    throw new Error(message || 'No se pudo completar la operación.');
+  }
+  return body;
+}
+
+export async function listarUsuarios() {
+  const response = await fetch(`${API_URL}/auth/users`, {
+    headers: authHeaders(),
+  });
+  return parseAuth<StaffUser[]>(response);
+}
+
+export async function crearUsuario(datos: {
+  nombre: string;
+  apellido: string;
+  correo: string;
+  password: string;
+  rol: StaffRoleName;
+}) {
+  const response = await fetch(`${API_URL}/auth/users`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(datos),
+  });
+  return parseAuth<StaffUser>(response);
+}

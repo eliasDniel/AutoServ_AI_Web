@@ -18,6 +18,7 @@ import Services from './views/Services';
 import Clients from './views/Clients';
 import Reports from './views/Reports';
 import Config from './views/Config';
+import Users from './views/Users';
 import DatabaseSchema from './views/DatabaseSchema';
 import Agenda from './views/Agenda';
 import PaymentModal from './components/PaymentModal';
@@ -510,6 +511,7 @@ export default function App() {
           {view === 'reports' && (
             <Reports orders={orders} clients={clients} vehicles={vehicles} />
           )}
+          {view === 'users' && role === 'admin' && <Users />}
           {view === 'config' && <Config />}
           {view === 'dbschema' && <DatabaseSchema onReset={reiniciarDatosTaller} />}
         </main>
