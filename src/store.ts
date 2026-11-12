@@ -16,6 +16,7 @@ export interface Appointment {
   mechanic: string;
   notes: string;
   status: AppointmentStatus;
+  origen?: 'web' | 'telegram' | string;
 }
 
 export const mechanics = [

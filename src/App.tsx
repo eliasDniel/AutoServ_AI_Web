@@ -505,7 +505,15 @@ export default function App() {
               onNavigate={v => setView(v)}
               onAddClient={c => setClients(prev => [...prev, c])}
               onUpdateClient={c => setClients(prev => prev.map(x => x.id === c.id ? c : x))}
-              onAddVehicle={v => setVehicles(prev => [...prev, v])}
+              onRemoveClient={id => {
+                setClients(prev => prev.filter(c => c.id !== id));
+                setVehicles(prev => prev.filter(v => v.clientId !== id));
+              }}
+              onAddVehicle={v => setVehicles(prev => {
+                const sin = prev.filter(x => x.id !== v.id && x.plate !== v.plate);
+                return [...sin, v];
+              })}
+              onRemoveVehicle={id => setVehicles(prev => prev.filter(v => v.id !== id))}
             />
           )}
           {view === 'reports' && (

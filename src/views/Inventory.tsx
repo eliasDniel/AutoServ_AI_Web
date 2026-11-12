@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { InventoryItem } from '../store';
-import { crearRepuesto, importarRepuestos, moverInventario } from '../../utils/recepcion';
+import { crearRepuesto, eliminarRepuesto, importarRepuestos, moverInventario } from '../../utils/recepcion';
 import { aCsv, descargarCsv, parsearCsv } from '../../utils/csv';
 
 interface InventoryProps {
@@ -17,21 +17,61 @@ const rotationColor: Record<string, { background: string; color: string }> = {
 
 type MovementType = 'entrada' | 'salida';
 
-interface NewPart { name: string; category: string; stock: string; min: string; max: string; price: string; rotation: 'Alta' | 'Media' | 'Baja'; }
+interface PartForm {
+  code: string;
+  name: string;
+  category: string;
+  stock: string;
+  min: string;
+  max: string;
+  price: string;
+}
+
+const emptyPart: PartForm = {
+  code: '',
+  name: '',
+  category: 'Lubricantes',
+  stock: '0',
+  min: '5',
+  max: '20',
+  price: '0',
+};
 
 export default function Inventory({ inventory, onUpdateInventory, role }: InventoryProps) {
   const isAdmin = role === 'admin';
+  const canEdit = role === 'admin' || role === 'asesor';
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedCode, setSelectedCode] = useState(inventory[1]?.code ?? '');
   const [showModal, setShowModal] = useState<MovementType | null>(null);
   const [movQty, setMovQty] = useState('1');
   const [movNote, setMovNote] = useState('');
-  const [showNewPart, setShowNewPart] = useState(false);
+  const [showPartForm, setShowPartForm] = useState(false);
+  const [editingCode, setEditingCode] = useState<string | null>(null);
   const [showPurchaseOrder, setShowPurchaseOrder] = useState(false);
-  const [newPart, setNewPart] = useState<NewPart>({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' });
+  const [partForm, setPartForm] = useState<PartForm>(emptyPart);
   const [savedPart, setSavedPart] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const openNew = () => {
+    setEditingCode(null);
+    setPartForm(emptyPart);
+    setShowPartForm(true);
+  };
+
+  const openEdit = (part: InventoryItem) => {
+    setEditingCode(part.code);
+    setPartForm({
+      code: part.code,
+      name: part.name,
+      category: part.category,
+      stock: String(part.stock),
+      min: String(part.min),
+      max: String(part.max),
+      price: String(part.price),
+    });
+    setShowPartForm(true);
+  };
 
   const downloadCsv = () => {
     const csv = aCsv(
@@ -79,21 +119,40 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
 
   const alerts = inventory.filter(p => p.stock < p.min);
 
-  const addNewPart = async () => {
-    if (!newPart.name.trim()) return;
+  const savePart = async () => {
+    if (!partForm.name.trim()) return;
     try {
-      onUpdateInventory(await crearRepuesto({
-        nombre: newPart.name,
-        categoria: newPart.category,
-        stock: parseInt(newPart.stock) || 0,
-        min: parseInt(newPart.min) || 5,
-        max: parseInt(newPart.max) || 20,
-        precio: parseFloat(newPart.price) || 0,
-      }));
+      const items = await crearRepuesto({
+        codigo: partForm.code.trim() || undefined,
+        nombre: partForm.name.trim(),
+        categoria: partForm.category,
+        stock: editingCode ? undefined : parseInt(partForm.stock, 10) || 0,
+        min: parseInt(partForm.min, 10) || 5,
+        max: parseInt(partForm.max, 10) || 20,
+        precio: parseFloat(partForm.price) || 0,
+      });
+      onUpdateInventory(items);
       setSavedPart(true);
-      setTimeout(() => { setShowNewPart(false); setSavedPart(false); setNewPart({ name: '', category: 'Lubricantes', stock: '0', min: '5', max: '20', price: '0', rotation: 'Media' }); }, 1200);
+      setTimeout(() => {
+        setShowPartForm(false);
+        setSavedPart(false);
+        setEditingCode(null);
+        setPartForm(emptyPart);
+      }, 800);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'No se pudo crear el repuesto.');
+      window.alert(error instanceof Error ? error.message : 'No se pudo guardar el repuesto.');
+    }
+  };
+
+  const removePart = async (code: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`¿Eliminar el repuesto ${code}?`)) return;
+    try {
+      const items = await eliminarRepuesto(code);
+      onUpdateInventory(items);
+      if (selectedCode === code) setSelectedCode(items[0]?.code ?? '');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo eliminar.');
     }
   };
 
@@ -128,32 +187,35 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
                 <button className="btn-secondary text-xs" onClick={() => fileRef.current?.click()}>Cargar CSV</button>
                 <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void onCsvFile(f); }} />
-                <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>
+                {canEdit && <button className="btn-primary text-xs" onClick={openNew}>+ Nuevo Repuesto</button>}
               </>
             )}
           </div>
         </div>
-        {showNewPart && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewPart(false)}>
+        {showPartForm && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPartForm(false)}>
             <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
-              <h3 className="text-sm font-bold text-slate-700 mb-4">Nuevo Repuesto</h3>
+              <h3 className="text-sm font-bold text-slate-700 mb-4">{editingCode ? `Editar ${editingCode}` : 'Nuevo Repuesto'}</h3>
               <div className="space-y-3">
+                <div><label className="form-label">Código {editingCode ? '' : '(opcional)'}</label>
+                  <input className="form-input mono" disabled={!!editingCode} placeholder="REP-011" value={partForm.code} onChange={e => setPartForm(p => ({ ...p, code: e.target.value }))} /></div>
                 <div><label className="form-label">Nombre del Repuesto *</label>
-                  <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={newPart.name} onChange={e => setNewPart(p => ({ ...p, name: e.target.value }))} /></div>
+                  <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={partForm.name} onChange={e => setPartForm(p => ({ ...p, name: e.target.value }))} /></div>
                 <div><label className="form-label">Categoría</label>
-                  <select className="form-select" value={newPart.category} onChange={e => setNewPart(p => ({ ...p, category: e.target.value }))}>
-                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión'].map(c => <option key={c}>{c}</option>)}
+                  <select className="form-select" value={partForm.category} onChange={e => setPartForm(p => ({ ...p, category: e.target.value }))}>
+                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión', 'Electricidad', 'Otros'].map(c => <option key={c}>{c}</option>)}
                   </select></div>
                 <div className="grid grid-cols-3 gap-2">
-                  <div><label className="form-label">Stock</label><input className="form-input" type="number" value={newPart.stock} onChange={e => setNewPart(p => ({ ...p, stock: e.target.value }))} /></div>
-                  <div><label className="form-label">Mín</label><input className="form-input" type="number" value={newPart.min} onChange={e => setNewPart(p => ({ ...p, min: e.target.value }))} /></div>
-                  <div><label className="form-label">Máx</label><input className="form-input" type="number" value={newPart.max} onChange={e => setNewPart(p => ({ ...p, max: e.target.value }))} /></div>
+                  {!editingCode && <div><label className="form-label">Stock</label><input className="form-input" type="number" value={partForm.stock} onChange={e => setPartForm(p => ({ ...p, stock: e.target.value }))} /></div>}
+                  <div><label className="form-label">Mín</label><input className="form-input" type="number" value={partForm.min} onChange={e => setPartForm(p => ({ ...p, min: e.target.value }))} /></div>
+                  <div><label className="form-label">Máx</label><input className="form-input" type="number" value={partForm.max} onChange={e => setPartForm(p => ({ ...p, max: e.target.value }))} /></div>
                 </div>
-                <div><label className="form-label">Precio</label><input className="form-input" type="number" step="0.01" value={newPart.price} onChange={e => setNewPart(p => ({ ...p, price: e.target.value }))} /></div>
+                <div><label className="form-label">Precio</label><input className="form-input" type="number" step="0.01" value={partForm.price} onChange={e => setPartForm(p => ({ ...p, price: e.target.value }))} /></div>
+                {editingCode && <p className="text-[11px] text-slate-400">El stock se ajusta con Entrada / Salida.</p>}
               </div>
               <div className="flex gap-2 mt-4">
-                <button className="btn-primary flex-1 justify-center text-xs" onClick={() => { void addNewPart(); }}>{savedPart ? '✓ Guardado' : 'Crear'}</button>
-                <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewPart(false)}>Cancelar</button>
+                <button className="btn-primary flex-1 justify-center text-xs" onClick={() => { void savePart(); }}>{savedPart ? '✓ Guardado' : 'Guardar'}</button>
+                <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowPartForm(false)}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -179,7 +241,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
               <button className="btn-secondary text-xs" onClick={() => fileRef.current?.click()}>Cargar CSV</button>
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void onCsvFile(f); }} />
-              <button className="btn-primary text-xs" onClick={() => setShowNewPart(true)}>+ Nuevo Repuesto</button>
+              {canEdit && <button className="btn-primary text-xs" onClick={openNew}>+ Nuevo Repuesto</button>}
             </>
           )}
         </div>
@@ -196,40 +258,38 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
         </div>
       )}
 
-      {/* New Part modal */}
-      {showNewPart && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewPart(false)}>
+      {showPartForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowPartForm(false)}>
           <div className="bg-white rounded-xl shadow-2xl w-96 p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-slate-700 mb-4">Nuevo Repuesto</h3>
+            <h3 className="text-sm font-bold text-slate-700 mb-4">{editingCode ? `Editar ${editingCode}` : 'Nuevo Repuesto'}</h3>
             <div className="space-y-3">
+              <div><label className="form-label">Código {editingCode ? '' : '(opcional)'}</label>
+                <input className="form-input mono" disabled={!!editingCode} placeholder="REP-011" value={partForm.code} onChange={e => setPartForm(p => ({ ...p, code: e.target.value }))} /></div>
               <div><label className="form-label">Nombre del Repuesto *</label>
-                <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={newPart.name} onChange={e => setNewPart(p => ({ ...p, name: e.target.value }))} /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <div><label className="form-label">Categoría</label>
-                  <select className="form-select" value={newPart.category} onChange={e => setNewPart(p => ({ ...p, category: e.target.value }))}>
-                    {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión', 'Electricidad', 'Otros'].map(c => <option key={c}>{c}</option>)}
-                  </select></div>
-                <div><label className="form-label">Rotación</label>
-                  <select className="form-select" value={newPart.rotation} onChange={e => setNewPart(p => ({ ...p, rotation: e.target.value as 'Alta' | 'Media' | 'Baja' }))}>
-                    <option>Alta</option><option>Media</option><option>Baja</option>
-                  </select></div>
-              </div>
+                <input className="form-input" placeholder="Ej. Filtro de Aceite Toyota" value={partForm.name} onChange={e => setPartForm(p => ({ ...p, name: e.target.value }))} /></div>
+              <div><label className="form-label">Categoría</label>
+                <select className="form-select" value={partForm.category} onChange={e => setPartForm(p => ({ ...p, category: e.target.value }))}>
+                  {['Lubricantes', 'Filtros', 'Frenos', 'Encendido', 'Motor', 'Suspensión', 'Electricidad', 'Otros'].map(c => <option key={c}>{c}</option>)}
+                </select></div>
               <div className="grid grid-cols-3 gap-2">
-                <div><label className="form-label">Stock Inicial</label>
-                  <input className="form-input" type="number" min="0" value={newPart.stock} onChange={e => setNewPart(p => ({ ...p, stock: e.target.value }))} /></div>
+                {!editingCode && (
+                  <div><label className="form-label">Stock Inicial</label>
+                    <input className="form-input" type="number" min="0" value={partForm.stock} onChange={e => setPartForm(p => ({ ...p, stock: e.target.value }))} /></div>
+                )}
                 <div><label className="form-label">Mínimo</label>
-                  <input className="form-input" type="number" min="0" value={newPart.min} onChange={e => setNewPart(p => ({ ...p, min: e.target.value }))} /></div>
+                  <input className="form-input" type="number" min="0" value={partForm.min} onChange={e => setPartForm(p => ({ ...p, min: e.target.value }))} /></div>
                 <div><label className="form-label">Máximo</label>
-                  <input className="form-input" type="number" min="0" value={newPart.max} onChange={e => setNewPart(p => ({ ...p, max: e.target.value }))} /></div>
+                  <input className="form-input" type="number" min="0" value={partForm.max} onChange={e => setPartForm(p => ({ ...p, max: e.target.value }))} /></div>
               </div>
               <div><label className="form-label">Precio Unitario ($)</label>
-                <input className="form-input" type="number" step="0.01" min="0" value={newPart.price} onChange={e => setNewPart(p => ({ ...p, price: e.target.value }))} /></div>
+                <input className="form-input" type="number" step="0.01" min="0" value={partForm.price} onChange={e => setPartForm(p => ({ ...p, price: e.target.value }))} /></div>
+              {editingCode && <p className="text-[11px] text-slate-400">El stock se ajusta con Entrada / Salida, no al editar la ficha.</p>}
             </div>
             <div className="flex gap-2 mt-4">
-              <button className="btn-primary flex-1 justify-center text-xs" onClick={addNewPart} disabled={!newPart.name.trim()}>
-                {savedPart ? '✓ Guardado' : 'Agregar Repuesto'}
+              <button className="btn-primary flex-1 justify-center text-xs" onClick={() => { void savePart(); }} disabled={!partForm.name.trim()}>
+                {savedPart ? '✓ Guardado' : 'Guardar'}
               </button>
-              <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewPart(false)}>Cancelar</button>
+              <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowPartForm(false)}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -313,8 +373,8 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-slate-50">
-                <tr>{['Código', 'Repuesto', 'Categoría', 'Stock', 'Mín/Máx', 'Precio', 'Rotación'].map(h => (
-                  <th key={h} className="text-left text-[10px] font-bold text-slate-400 uppercase px-3 py-2">{h}</th>
+                <tr>                {['Código', 'Repuesto', 'Categoría', 'Stock', 'Mín/Máx', 'Precio', 'Rotación', ''].map(h => (
+                  <th key={h || 'acciones'} className="text-left text-[10px] font-bold text-slate-400 uppercase px-3 py-2">{h}</th>
                 ))}</tr>
               </thead>
               <tbody>
@@ -332,7 +392,7 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
                       </div>
                       <div className="w-16 bg-slate-100 rounded-full h-1 mt-1">
                         <div className="h-1 rounded-full" style={{
-                          width: `${Math.min(100, (part.stock / part.max) * 100)}%`,
+                          width: `${Math.min(100, (part.stock / Math.max(part.max, 1)) * 100)}%`,
                           background: part.stock < part.min ? '#ef4444' : '#22c55e'
                         }} />
                       </div>
@@ -340,6 +400,14 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
                     <td className="px-3 py-2.5 text-slate-500">{part.min} / {part.max}</td>
                     <td className="px-3 py-2.5 font-medium text-slate-700">${part.price.toFixed(2)}</td>
                     <td className="px-3 py-2.5"><span className="status-badge" style={rotationColor[part.rotation]}>{part.rotation}</span></td>
+                    <td className="px-3 py-2.5 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
+                      {canEdit && (
+                        <button className="text-blue-500 hover:text-blue-700" onClick={() => openEdit(part)}>Editar</button>
+                      )}
+                      {isAdmin && (
+                        <button className="text-red-400 hover:text-red-600" onClick={() => { void removePart(part.code); }}>Eliminar</button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -364,9 +432,11 @@ export default function Inventory({ inventory, onUpdateInventory, role }: Invent
                   }</div>
               ))}
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
+              {canEdit && <button className="btn-secondary text-xs flex-1 justify-center" onClick={() => openEdit(selected)}>Editar</button>}
               {isAdmin && <button className="btn-primary text-xs flex-1 justify-center" onClick={() => setShowModal('entrada')}>📥 Entrada</button>}
               {isAdmin && <button className="btn-secondary text-xs flex-1 justify-center" onClick={() => setShowModal('salida')}>📤 Salida</button>}
+              {isAdmin && <button className="btn-secondary text-xs flex-1 justify-center text-red-500" onClick={() => { void removePart(selected.code); }}>Eliminar</button>}
             </div>
             {/* Movement history */}
             {(selected.movimientos?.length ?? 0) > 0 && (

@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { Client, Vehicle, ServiceOrder } from '../store';
+import {
+  crearVinculoTelegram,
+  eliminarCliente,
+  eliminarVehiculo,
+  guardarCliente,
+  guardarVehiculo,
+} from '../../utils/recepcion';
 
 interface ClientsProps {
   clients: Client[];
@@ -9,7 +16,9 @@ interface ClientsProps {
   onNavigate: (v: 'reception') => void;
   onAddClient: (c: Client) => void;
   onUpdateClient: (c: Client) => void;
+  onRemoveClient?: (id: string) => void;
   onAddVehicle: (v: Vehicle) => void;
+  onRemoveVehicle?: (id: string) => void;
 }
 
 const statusLabel: Record<string, string> = { recepcion: 'RECEPCIÓN', en_taller: 'EN TALLER', terminada: 'TERMINADA' };
@@ -24,7 +33,7 @@ const blankVehicle = (clientId: string): Omit<Vehicle, 'id'> => ({
 const initials = (name?: string) =>
   (name ?? '').split(' ').filter(Boolean).slice(0, 2).map(w => w[0] ?? '').join('') || '?';
 
-export default function Clients({ clients, vehicles, orders, onSelectOS, onNavigate, onAddClient, onUpdateClient, onAddVehicle }: ClientsProps) {
+export default function Clients({ clients, vehicles, orders, onSelectOS, onNavigate, onAddClient, onUpdateClient, onRemoveClient, onAddVehicle, onRemoveVehicle }: ClientsProps) {
   const [selected, setSelected] = useState<Client | null>(clients[0] ?? null);
   const [search, setSearch] = useState('');
   const [editMode, setEditMode] = useState(false);
@@ -35,6 +44,8 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
   const [newClientDraft, setNewClientDraft] = useState(blankClient());
   const [newVehicleDraft, setNewVehicleDraft] = useState(blankVehicle(clients[0]?.id ?? ''));
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  const [telegramLink, setTelegramLink] = useState('');
+  const [telegramMsg, setTelegramMsg] = useState('');
 
   useEffect(() => {
     if (!clients.length) {
@@ -60,15 +71,57 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
   const clientVehicles = selected ? vehicles.filter(v => v.clientId === selected.id) : [];
   const clientOrders = selected ? orders.filter(o => o.clientId === selected.id) : [];
 
-  const selectClient = (c: Client) => { setSelected(c); setDraft(c); setEditMode(false); setSavedMsg(''); };
-
-  const saveEdit = () => {
-    if (!draft) return;
-    onUpdateClient(draft);
-    setSelected(draft);
-    setSavedMsg('✓ Cambios guardados');
+  const selectClient = (c: Client) => {
+    setSelected(c);
+    setDraft(c);
     setEditMode(false);
-    setTimeout(() => setSavedMsg(''), 2500);
+    setSavedMsg('');
+    setTelegramLink('');
+    setTelegramMsg('');
+  };
+
+  const vincularTelegram = async () => {
+    if (!selected?.id) return;
+    setTelegramMsg('');
+    try {
+      const res = await crearVinculoTelegram(selected.id);
+      setTelegramLink(res.deepLink);
+      setTelegramMsg(
+        res.botUsername
+          ? 'Enlace listo (válido 24 h). El cliente debe abrirlo en Telegram.'
+          : 'Token generado. Configura TELEGRAM_BOT_USERNAME para el deep link completo.',
+      );
+    } catch (err) {
+      setTelegramMsg(err instanceof Error ? err.message : 'No se pudo generar el enlace.');
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!draft) return;
+    try {
+      const saved = await guardarCliente(draft);
+      onUpdateClient(saved);
+      setSelected(saved);
+      setDraft(saved);
+      setSavedMsg('✓ Cambios guardados');
+      setEditMode(false);
+      setTimeout(() => setSavedMsg(''), 2500);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo guardar el cliente.');
+    }
+  };
+
+  const removeClient = async () => {
+    if (!selected) return;
+    if (!window.confirm(`¿Eliminar al cliente ${selected.name}?`)) return;
+    try {
+      await eliminarCliente(selected.id);
+      onRemoveClient?.(selected.id);
+      setSelected(null);
+      setDraft(null);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar el cliente.');
+    }
   };
 
   const validateNewClient = () => {
@@ -78,25 +131,45 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
     return errs;
   };
 
-  const submitNewClient = () => {
+  const submitNewClient = async () => {
     const errs = validateNewClient();
     if (Object.keys(errs).length) { setClientErrors(errs); return; }
-    const newId = `C${String(clients.length + 1).padStart(3, '0')}`;
-    const newC: Client = { id: newId, ...newClientDraft };
-    onAddClient(newC);
-    setSelected(newC);
-    setDraft(newC);
-    setShowNewClient(false);
-    setNewClientDraft(blankClient());
-    setClientErrors({});
+    try {
+      const newC = await guardarCliente({ ...newClientDraft });
+      onAddClient(newC);
+      setSelected(newC);
+      setDraft(newC);
+      setShowNewClient(false);
+      setNewClientDraft(blankClient());
+      setClientErrors({});
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo crear el cliente.');
+    }
   };
 
-  const submitNewVehicle = () => {
+  const submitNewVehicle = async () => {
     if (!selected || !newVehicleDraft.plate.trim() || !newVehicleDraft.model.trim()) return;
-    const newId = `V${String(vehicles.length + 1).padStart(3, '0')}`;
-    onAddVehicle({ id: newId, clientId: selected.id, ...newVehicleDraft });
-    setShowNewVehicle(false);
-    setNewVehicleDraft(blankVehicle(selected.id));
+    try {
+      const saved = await guardarVehiculo({
+        clientId: selected.id,
+        ...newVehicleDraft,
+      });
+      onAddVehicle(saved);
+      setShowNewVehicle(false);
+      setNewVehicleDraft(blankVehicle(selected.id));
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo registrar el vehículo.');
+    }
+  };
+
+  const removeVehicle = async (vehicleId: string) => {
+    if (!window.confirm('¿Eliminar este vehículo?')) return;
+    try {
+      await eliminarVehiculo(vehicleId);
+      onRemoveVehicle?.(vehicleId);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar el vehículo.');
+    }
   };
 
   return (
@@ -125,7 +198,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
               ))}
             </div>
             <div className="flex gap-2 mt-4">
-              <button className="btn-primary flex-1 justify-center text-xs" onClick={submitNewClient}>Guardar Cliente</button>
+              <button className="btn-primary flex-1 justify-center text-xs" onClick={() => { void submitNewClient(); }}>Guardar Cliente</button>
               <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => { setShowNewClient(false); setClientErrors({}); }}>Cancelar</button>
             </div>
           </div>
@@ -200,7 +273,7 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
             <div className="flex gap-2 mt-4">
               <button className="btn-primary flex-1 justify-center text-xs"
                 disabled={!newVehicleDraft.plate.trim() || !newVehicleDraft.model.trim()}
-                onClick={submitNewVehicle}>Registrar Vehículo</button>
+                onClick={() => { void submitNewVehicle(); }}>Registrar Vehículo</button>
               <button className="btn-secondary flex-1 justify-center text-xs" onClick={() => setShowNewVehicle(false)}>Cancelar</button>
             </div>
           </div>
@@ -270,17 +343,32 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
           <div className="flex gap-2">
             {editMode ? (
               <>
-                <button className="btn-primary text-xs" onClick={saveEdit}>💾 Guardar Cambios</button>
+                <button className="btn-primary text-xs" onClick={() => { void saveEdit(); }}>💾 Guardar Cambios</button>
                 <button className="btn-secondary text-xs" onClick={() => { setEditMode(false); setDraft(selected); }}>✕ Cancelar</button>
               </>
             ) : (
               <>
+                <button className="btn-secondary text-xs" onClick={() => { void vincularTelegram(); }}>
+                  Vincular Telegram
+                </button>
                 <button className="btn-secondary text-xs" onClick={() => setEditMode(true)}>✏️ Editar</button>
+                <button className="btn-secondary text-xs text-red-500" onClick={() => { void removeClient(); }}>Eliminar</button>
                 <button className="btn-primary text-xs" onClick={() => onNavigate('reception')}>+ Nueva OS</button>
               </>
             )}
           </div>
         </div>
+
+        {(telegramMsg || telegramLink) && (
+          <div className="bg-white rounded-lg border border-slate-200 p-3 text-xs space-y-2">
+            {telegramMsg && <p className="text-slate-600 font-semibold">{telegramMsg}</p>}
+            {telegramLink && (
+              <a className="text-blue-600 break-all underline" href={telegramLink} target="_blank" rel="noreferrer">
+                {telegramLink}
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           {/* Contact */}
@@ -319,7 +407,15 @@ export default function Clients({ clients, vehicles, orders, onSelectOS, onNavig
                   <div key={v.id} className="border border-slate-100 rounded-lg p-3 hover:bg-blue-50 transition-colors">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold text-slate-700">{v.brand} {v.model}</span>
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{v.plate}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{v.plate}</span>
+                        <button
+                          className="text-[10px] text-red-400 hover:text-red-600"
+                          onClick={() => { void removeVehicle(v.id); }}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
                       <span>Año: <strong>{v.year}</strong></span>

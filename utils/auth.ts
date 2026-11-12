@@ -144,3 +144,21 @@ export async function crearUsuario(datos: {
   });
   return parseAuth<StaffUser>(response);
 }
+
+export async function actualizarUsuario(
+  id: number,
+  datos: {
+    nombre?: string;
+    apellido?: string;
+    rol?: StaffRoleName;
+    password?: string;
+    activo?: boolean;
+  },
+) {
+  const response = await fetch(`${API_URL}/auth/users/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(datos),
+  });
+  return parseAuth<StaffUser>(response);
+}

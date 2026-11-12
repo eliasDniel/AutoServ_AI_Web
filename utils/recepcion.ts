@@ -212,7 +212,7 @@ export async function crearRepuesto(repuesto: {
   codigo?: string;
   nombre: string;
   categoria: string;
-  stock: number;
+  stock?: number;
   min: number;
   max: number;
   precio: number;
@@ -221,6 +221,14 @@ export async function crearRepuesto(repuesto: {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(repuesto),
+  });
+  return parse<InventoryItem[]>(response);
+}
+
+export async function eliminarRepuesto(codigo: string) {
+  const response = await fetch(`${API_URL}/inventario/${encodeURIComponent(codigo)}`, {
+    method: 'DELETE',
+    headers: headers(),
   });
   return parse<InventoryItem[]>(response);
 }
@@ -269,6 +277,68 @@ export async function guardarCita(cita: Appointment) {
     body: JSON.stringify(citaBody(cita)),
   });
   return parse<Appointment>(response);
+}
+
+export async function guardarCliente(cliente: {
+  id?: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+}) {
+  const response = await fetch(`${API_URL}/clientes`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(cliente),
+  });
+  return parse<Client>(response);
+}
+
+export async function eliminarCliente(id: string) {
+  const response = await fetch(`${API_URL}/clientes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: headers(),
+  });
+  return parse<{ ok: boolean }>(response);
+}
+
+export async function guardarVehiculo(vehiculo: {
+  id?: string;
+  clientId: string;
+  plate: string;
+  brand: string;
+  model: string;
+  year?: string;
+  color?: string;
+  vin?: string;
+  engine?: string;
+  fuel?: string;
+  transmission?: string;
+  km?: number;
+}) {
+  const response = await fetch(`${API_URL}/vehiculos`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(vehiculo),
+  });
+  return parse<Vehicle>(response);
+}
+
+export async function eliminarVehiculo(id: string) {
+  const response = await fetch(`${API_URL}/vehiculos/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: headers(),
+  });
+  return parse<{ ok: boolean }>(response);
+}
+
+export async function crearVinculoTelegram(clienteId: string) {
+  const response = await fetch(
+    `${API_URL}/clientes/${encodeURIComponent(clienteId)}/telegram-link`,
+    { method: 'POST', headers: headers() },
+  );
+  return parse<{ token: string; expira: string; deepLink: string; botUsername: string | null }>(response);
 }
 
 export async function reservarCitaPublica(cita: Appointment) {

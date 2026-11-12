@@ -145,7 +145,7 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
                 className="btn-secondary text-xs flex items-center gap-1.5"
                 onClick={onSync}
                 disabled={syncing}
-                title="Sincronizar citas recibidas por WhatsApp"
+                title="Actualizar citas (web y Telegram)"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
                   style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }}>
@@ -153,7 +153,7 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
                   <polyline points="1 20 1 14 7 14"/>
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                 </svg>
-                {syncing ? 'Sincronizando…' : 'Sincronizar WhatsApp'}
+                {syncing ? 'Actualizando…' : 'Actualizar citas'}
               </button>
             )}
             <button className="btn-primary text-xs flex items-center gap-1.5" onClick={() => { setShowNewForm(true); setFormError(''); }}>
@@ -347,7 +347,7 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
               <h3 className="text-sm font-bold" style={{ color: 'var(--text-1)', fontFamily: 'DM Sans, sans-serif' }}>
                 Registrar Nueva Cita
               </h3>
-              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Recibida por WhatsApp</span>
+              <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>Registro manual / web</span>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -429,6 +429,7 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
                 { l: 'Placa',      v: detail.plate, mono: true },
                 { l: 'Servicio',   v: detail.service     },
                 { l: 'Fecha/Hora', v: `${detail.date} · ${detail.time}` },
+                { l: 'Origen',     v: detail.origen === 'telegram' ? 'Telegram' : 'Web' },
                 { l: 'Mecánico',   v: mechanics.find(m => m.id === detail.mechanic)?.name ?? detail.mechanic },
               ].map(f => (
                 <div key={f.l} className="flex gap-3">
@@ -466,11 +467,13 @@ export default function Agenda({ appointments, syncing, onSync, onUpdateAppointm
 
 function AppointmentChip({ apt, onClick }: { apt: Appointment; onClick: () => void }) {
   const m = statusMeta[apt.status];
+  const viaTelegram = apt.origen === 'telegram';
   return (
     <button onClick={onClick}
       className="w-full text-left px-2 py-1 rounded text-[10px] font-semibold mb-1 truncate transition-opacity hover:opacity-80"
       style={{ background: m.bg, color: m.color, border: `1px solid ${m.color}33` }}>
       {apt.time} · {apt.clientName}
+      {viaTelegram && <span className="ml-1 opacity-80">· TG</span>}
       <div className="font-normal truncate" style={{ color: m.color, opacity: 0.8 }}>{apt.service}</div>
     </button>
   );
